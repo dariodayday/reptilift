@@ -10,5 +10,5 @@
 // the Account UI shows a friendly "cloud sync not set up yet" message — no
 // errors, no network calls.
 // ============================================================================
-window.SUPA_URL  = "__SUPABASE_URL__";
-window.SUPA_ANON = "__SUPABASE_ANON_KEY__";
+window.SUPA_URL  = "https://uicqdjmdnatmgglkjurp.supabase.co";
+window.SUPA_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVpY3Fkam1kbmF0bWdnbGtqdXJwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE4OTM2MjgsImV4cCI6MjA5NzQ2OTYyOH0.f7QB5g31qMWeEFJAmrrKh2AHIeQirYVyMhzkx9bpOOY";
