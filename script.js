@@ -1,4 +1,4 @@
-// Reptilift v3.2 — earn your beast rank per exercise from your MMR.
+// Reptilift v3.3 — earn your beast rank per exercise from your MMR.
 // v3.2 adds optional email+password accounts + Supabase cloud sync (see the
 // "cloud sync" section near the bottom). Fully local/guest experience is
 // unchanged when Supabase isn't configured or nobody is logged in.
@@ -1811,6 +1811,14 @@ if (ax.logout) ax.logout.addEventListener("click", async () => {
   // onAuthStateChange will fire SIGNED_OUT → onLogout; call it directly too in
   // case the event is delayed.
   onLogout();
+});
+
+// Clicking the top "Sign in" chip should visibly surface the account form, not
+// just silently switch tabs. Bring the card into view and focus the email field.
+if (ax.chip) ax.chip.addEventListener("click", () => {
+  if (typeof switchTab === "function") switchTab("home");
+  if (ax.wrap) ax.wrap.scrollIntoView({ behavior: "smooth", block: "center" });
+  if (!cloudUser && ax.email) setTimeout(() => { try { ax.email.focus(); } catch (e) {} }, 350);
 });
 
 // retry a pending push when the network comes back
