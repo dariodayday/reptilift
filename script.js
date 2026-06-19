@@ -1,4 +1,4 @@
-// Reptilift v3.6 — earn your beast rank per exercise from your MMR.
+// Reptilift v3.7 — earn your beast rank per exercise from your MMR.
 // v3.6 adds a Progress screen (inline-SVG charts of overall MMR over time, per-lift
 // MMR, bodyweight trend, and per-session volume — all reconstructed from stored
 // sets/workouts) plus a shareable rank card rendered to <canvas> (native Web Share
@@ -243,8 +243,9 @@ function logBodyweight(bw) {
   bwLog.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
   saveBwLog();
 }
-// seed the log once from the existing profile bodyweight so first-time chart isn't blank.
-if (!bwLog.length && profile.bodyweight) logBodyweight(profile.bodyweight);
+// NOTE: the one-time seed from profile.bodyweight runs in the init block at the
+// bottom of the file — todayStr()/fmtDate() aren't defined yet at this point, so
+// calling logBodyweight() here would throw a TDZ error and blank the whole app.
 
 // ===== economy state ("Scales" 🦎 — the in-app currency) =====
 // wallet:   { balance } running coin balance.
@@ -2047,6 +2048,9 @@ if ("serviceWorker" in navigator && location.protocol === "https:") {
 })();
 
 // ===== init =====
+// seed the bodyweight log once from the existing profile weight (safe here: all
+// helpers like todayStr() are defined by now) so the first trend chart isn't blank.
+if (!bwLog.length && profile.bodyweight) logBodyweight(profile.bodyweight);
 rolloverDaily();              // reset daily quests if the calendar day changed
 maybeAutoFreeze();            // spend a Streak Freeze if it can save a broken streak
 refreshWallet();              // paint balance chips
