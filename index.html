@@ -42,14 +42,19 @@
     <!-- MENU -->
     <section id="home" class="panel active">
       <div class="rankhero" id="rankHero"></div>
+
+      <!-- daily-quests widget: at-a-glance view of TODAY'S dailies, shares the
+           row builder + claim logic with the Quests page (see renderHomeQuests) -->
+      <div class="homequests">
+        <div class="hq-head">
+          <h3 class="hq-title">🎯 Daily Quests</h3>
+          <button class="hq-more" data-go="quests" type="button">All quests →</button>
+        </div>
+        <div id="homeQuests" class="questlist"></div>
+      </div>
+
       <nav class="menu">
-        <button class="menu-btn" data-go="log"><span>🏋️</span> Log a Workout</button>
-        <button class="menu-btn" data-go="routines"><span>📋</span> Routines</button>
-        <button class="menu-btn" data-go="ranks"><span>🏆</span> My Ranks</button>
         <button class="menu-btn" data-go="progress"><span>📈</span> Progress</button>
-        <button class="menu-btn" data-go="quests"><span>🎯</span> Quests</button>
-        <button class="menu-btn" data-go="shop"><span>🛒</span> Shop</button>
-        <button class="menu-btn" data-go="history"><span>📜</span> History</button>
         <button class="menu-btn gold" id="flexBtn"><span>💪</span> Flex Card</button>
       </nav>
       <div class="statbar">
@@ -237,7 +242,7 @@
     </section>
 
     <footer class="footer">
-      Reptilift v9.1 — rough cut
+      Reptilift v9.2 — rough cut
       <button id="replayIntro" class="replay">↻ replay intro</button>
     </footer>
 

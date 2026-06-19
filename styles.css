@@ -173,6 +173,19 @@ body {
 .stat span { display: block; font-size: 24px; font-weight: 800; }
 .stat label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
 
+/* menu daily-quests widget */
+.homequests {
+  background: var(--card); border: 1px solid var(--line);
+  border-radius: 16px; padding: 14px 14px 4px; margin: 16px 0;
+}
+.hq-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.hq-title { font-size: 16px; font-weight: 800; letter-spacing: .2px; }
+.hq-more {
+  background: none; border: none; color: var(--gold);
+  font-size: 13px; font-weight: 800; cursor: pointer; padding: 4px 2px;
+}
+.hq-more:active { transform: scale(.97); }
+
 /* main menu */
 .menu { display: flex; flex-direction: column; gap: 10px; margin: 16px 0; }
 .menu-btn {

@@ -1,4 +1,4 @@
-// Reptilift v3.7 — earn your beast rank per exercise from your MMR.
+// Reptilift v3.8 — earn your beast rank per exercise from your MMR.
 // v3.6 adds a Progress screen (inline-SVG charts of overall MMR over time, per-lift
 // MMR, bodyweight trend, and per-session volume — all reconstructed from stored
 // sets/workouts) plus a shareable rank card rendered to <canvas> (native Web Share
@@ -1405,29 +1405,32 @@ function useItem(key) {
   }
 }
 
+// shared quest-row markup. Used by the Quests page AND the menu daily widget so
+// the two stay in sync (same progress bar / claim button / claimed state).
+function buildQuestRow(q, prog, claimed) {
+  const cur = Math.min(prog, q.goal), done = prog >= q.goal;
+  const pct = Math.max(0, Math.min(100, Math.round((cur / q.goal) * 100)));
+  const state = claimed ? "claimed" : (done ? "ready" : "");
+  const btn = claimed
+    ? `<span class="q-claimed">✓ Claimed</span>`
+    : (done ? `<button class="btn q-claim" data-claim="${q.id}">Claim ${COIN} ${q.reward}</button>`
+            : `<span class="q-reward">${COIN} ${q.reward}</span>`);
+  return `<div class="quest ${state}">
+    <div class="q-ic">${q.icon}</div>
+    <div class="q-main">
+      <div class="q-name">${q.name}</div>
+      <div class="progress"><i style="width:${pct}%"></i></div>
+      <div class="q-prog">${cur.toLocaleString()} / ${q.goal.toLocaleString()}</div>
+    </div>
+    ${btn}</div>`;
+}
+
 function renderQuests() {
   rolloverDaily(); refreshWallet();
   const dBox = document.getElementById("dailyQuests"), mBox = document.getElementById("milestoneQuests");
-  const buildRow = (q, prog, claimed) => {
-    const cur = Math.min(prog, q.goal), done = prog >= q.goal;
-    const pct = Math.max(0, Math.min(100, Math.round((cur / q.goal) * 100)));
-    const state = claimed ? "claimed" : (done ? "ready" : "");
-    const btn = claimed
-      ? `<span class="q-claimed">✓ Claimed</span>`
-      : (done ? `<button class="btn q-claim" data-claim="${q.id}">Claim ${COIN} ${q.reward}</button>`
-              : `<span class="q-reward">${COIN} ${q.reward}</span>`);
-    return `<div class="quest ${state}">
-      <div class="q-ic">${q.icon}</div>
-      <div class="q-main">
-        <div class="q-name">${q.name}</div>
-        <div class="progress"><i style="width:${pct}%"></i></div>
-        <div class="q-prog">${cur.toLocaleString()} / ${q.goal.toLocaleString()}</div>
-      </div>
-      ${btn}</div>`;
-  };
-  dBox.innerHTML = QUESTS.daily.map((q) => buildRow(q, q.prog(quests.daily), !!quests.daily.claimed[q.id])).join("");
-  mBox.innerHTML = QUESTS.milestone.map((q) => buildRow(q, q.prog(quests.lifetime), !!quests.claimed[q.id])).join("");
-  document.querySelectorAll("[data-claim]").forEach((b) => b.addEventListener("click", () => claimQuest(b.dataset.claim)));
+  dBox.innerHTML = QUESTS.daily.map((q) => buildQuestRow(q, q.prog(quests.daily), !!quests.daily.claimed[q.id])).join("");
+  mBox.innerHTML = QUESTS.milestone.map((q) => buildQuestRow(q, q.prog(quests.lifetime), !!quests.claimed[q.id])).join("");
+  document.querySelectorAll("#quests [data-claim]").forEach((b) => b.addEventListener("click", () => claimQuest(b.dataset.claim)));
 }
 function claimQuest(id) {
   let q = QUESTS.daily.find((x) => x.id === id), daily = true;
@@ -1440,7 +1443,23 @@ function claimQuest(id) {
   if (daily) quests.daily.claimed[id] = true; else quests.claimed[id] = true;
   saveEconomy();
   if (soundOn) { playRankUpSfx(); buzz([30, 40, 30]); }
+  // refresh whichever views exist — the Quests page and the menu daily widget
+  // share claim logic, so both must reflect the payout / claimed state.
   renderQuests();
+  renderHomeQuests();
+}
+
+// menu daily-quests widget: an at-a-glance view of just TODAY'S daily quests,
+// reusing the shared row builder + claim logic so it stays in sync with the
+// Quests page. Reflects rolloverDaily and re-renders on home render / claim.
+function renderHomeQuests() {
+  const box = document.getElementById("homeQuests");
+  if (!box) return;
+  rolloverDaily();
+  box.innerHTML = QUESTS.daily
+    .map((q) => buildQuestRow(q, q.prog(quests.daily), !!quests.daily.claimed[q.id]))
+    .join("");
+  box.querySelectorAll("[data-claim]").forEach((b) => b.addEventListener("click", () => claimQuest(b.dataset.claim)));
 }
 
 // ===== home dashboard =====
@@ -1470,6 +1489,7 @@ function renderHome() {
   document.getElementById("statStreak").textContent = computeStreak();
   document.getElementById("statTop").textContent = top ? top.toLocaleString() : "0";
   document.getElementById("statExers").textContent = Object.keys(bests).length;
+  renderHomeQuests();
 }
 
 // ===== rank-up celebration =====
