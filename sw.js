@@ -1,5 +1,5 @@
 // Reptilift service worker — cache core assets for offline use.
-const CACHE = "reptilift-v3.6";
+const CACHE = "reptilift-v3.7";
 const ASSETS = [
   "./", "index.html", "styles.css", "script.js", "supabase-config.js",
   "logo.png", "eyes.png", "introeyes.png", "icon-192.png", "icon-512.png",
@@ -24,11 +24,18 @@ self.addEventListener("fetch", (e) => {
   // (Supabase API at *.supabase.co, the jsdelivr CDN, Google Fonts) go straight
   // to the network so auth/sync and font loads are never cached or intercepted.
   if (new URL(e.request.url).origin !== self.location.origin) return;
+  // Stale-while-revalidate: serve cache instantly if present, but always refetch
+  // in the background and update the cache, so code/config changes self-heal on
+  // the next load (no more stale config stuck behind a missed cache bump).
   e.respondWith(
-    caches.match(e.request).then((hit) => hit || fetch(e.request).then((res) => {
-      const copy = res.clone();
-      caches.open(CACHE).then((c) => c.put(e.request, copy)).catch(() => {});
-      return res;
-    }).catch(() => caches.match("index.html")))
+    caches.open(CACHE).then((cache) =>
+      cache.match(e.request).then((hit) => {
+        const fetched = fetch(e.request).then((res) => {
+          cache.put(e.request, res.clone()).catch(() => {});
+          return res;
+        }).catch(() => hit || cache.match("index.html"));
+        return hit || fetched;
+      })
+    )
   );
 });
