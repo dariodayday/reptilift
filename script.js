@@ -1,4 +1,8 @@
-// Reptilift v3.9 — earn your beast rank per exercise from your MMR.
+// Reptilift v3.10 — earn your beast rank per exercise from your MMR.
+// v3.10 adds a "Favorite lift" to the Profile: chosen from a muscle-group-grouped
+// dropdown of the full catalog, stored as profile.favoriteExercise (exId) inside the
+// existing reptilift_profile object (auto-syncs, no new key). Shown read-only in the
+// profile stats with its best beast/MMR when available; hidden if unset or stale.
 // v3.9 adds a dedicated Profile page (#profile-page) reached from the top avatar
 // chip + a Menu button. Profile picture (downscaled to 256px JPEG data URL),
 // display name, and bio all live inside the existing reptilift_profile object so
@@ -236,6 +240,7 @@ if (!profile || typeof profile !== "object") profile = { bodyweight: null };
 if (typeof profile.name !== "string") profile.name = "";
 if (typeof profile.bio !== "string") profile.bio = "";
 if (typeof profile.avatar !== "string") profile.avatar = "";
+if (typeof profile.favoriteExercise !== "string") profile.favoriteExercise = "";  // exId of chosen favorite lift
 let sets = JSON.parse(localStorage.getItem("reptilift_sets") || "[]");   // every set, all time
 let bests = JSON.parse(localStorage.getItem("reptilift_bests") || "{}"); // exId -> {beast, oneRM, date}
 let customEx = JSON.parse(localStorage.getItem("reptilift_customex") || "[]");
@@ -1560,6 +1565,42 @@ function topLift() {
   return { name: ex ? ex.name : best.id, beast: classify(best.mmr) };
 }
 
+// Resolve the stored favorite into a display object, tolerating a missing/stale id.
+// Returns null when unset or the id no longer matches a catalog exercise. When the
+// favorite has a recorded best, includes its beast + MMR for the read-only display.
+function favoriteLift() {
+  const id = profile.favoriteExercise;
+  if (!id) return null;
+  const ex = exById(id);
+  if (!ex) return null;                          // stale id (e.g. deleted custom exercise)
+  const rec = bests[id];
+  const beast = rec && typeof rec.mmr === "number" ? classify(rec.mmr) : null;
+  return { name: ex.name, beast, mmr: rec && typeof rec.mmr === "number" ? rec.mmr : null };
+}
+
+// Build <optgroup>-grouped <option>s for the favorite-lift <select>, preserving the
+// catalog's group order and pre-selecting the current favorite. Leads with a "none"
+// option. Called only from renderProfile (never at top level — load-order safe).
+function favoriteSelectHtml() {
+  const cur = profile.favoriteExercise || "";
+  const groups = [];                             // [group, ex[]] in first-seen order
+  EXERCISES().forEach((ex) => {
+    let g = groups.find((x) => x[0] === ex.group);
+    if (!g) { g = [ex.group, []]; groups.push(g); }
+    g[1].push(ex);
+  });
+  let html = `<option value=""${cur ? "" : " selected"}>None</option>`;
+  groups.forEach(([group, list]) => {
+    html += `<optgroup label="${escapeHtml(group || "Other")}">`;
+    list.forEach((ex) => {
+      const sel = ex.id === cur ? " selected" : "";
+      html += `<option value="${escapeHtml(ex.id)}"${sel}>${escapeHtml(ex.name)}</option>`;
+    });
+    html += `</optgroup>`;
+  });
+  return html;
+}
+
 function renderProfile() {
   const b = overallBeast();
   const mmr = overallMMR();
@@ -1582,21 +1623,30 @@ function renderProfile() {
   if (statsBox) {
     const tl = topLift();
     const tlTxt = tl ? `${tl.beast ? tl.beast.emoji + " " : ""}${tl.name}` : "—";
+    const fav = favoriteLift();
+    let favHtml = "";
+    if (fav) {
+      const tail = fav.beast ? ` · ${fav.beast.emoji} ${fav.mmr.toLocaleString()} MMR` : "";
+      favHtml = `<div class="pstat pstat-fav"><b style="font-size:15px;line-height:1.5">${escapeHtml(fav.name)}${tail}</b><span>favorite lift</span></div>`;
+    }
     statsBox.innerHTML = `
       <div class="pstat"><b>${computeStreak()}</b><span>day streak</span></div>
       <div class="pstat"><b>${workouts.length.toLocaleString()}</b><span>workouts</span></div>
       <div class="pstat"><b>${sets.length.toLocaleString()}</b><span>sets logged</span></div>
-      <div class="pstat"><b style="font-size:15px;line-height:1.5">${escapeHtml(tlTxt)}</b><span>top lift</span></div>`;
+      <div class="pstat"><b style="font-size:15px;line-height:1.5">${escapeHtml(tlTxt)}</b><span>top lift</span></div>
+      ${favHtml}`;
   }
 
   // populate the edit fields from the stored profile
   const nameI = document.getElementById("peName");
   const bioI = document.getElementById("peBio");
   const bwI = document.getElementById("peBw");
+  const favI = document.getElementById("peFav");
   const av = document.getElementById("peAvatarPreview");
   if (nameI) nameI.value = profile.name || "";
   if (bioI) bioI.value = profile.bio || "";
   if (bwI) bwI.value = profile.bodyweight || "";
+  if (favI) favI.innerHTML = favoriteSelectHtml();   // rebuild + pre-select current favorite
   if (av) av.innerHTML = avatarInner();
   updateBioCount();
   refreshAvatars();
@@ -1646,8 +1696,12 @@ let stagedAvatar = null;
   if (saveBtn) saveBtn.addEventListener("click", () => {
     const nameI = document.getElementById("peName");
     const bwI = document.getElementById("peBw");
+    const favI = document.getElementById("peFav");
     profile.name = (nameI ? nameI.value : "").trim().slice(0, 24);
     profile.bio = (bioI ? bioI.value : "").trim().slice(0, 160);
+    // favorite: store the exId, but only if it's still a real catalog exercise.
+    const favVal = favI ? favI.value.trim() : (profile.favoriteExercise || "");
+    profile.favoriteExercise = (favVal && exById(favVal)) ? favVal : "";
     if (stagedAvatar !== null) profile.avatar = stagedAvatar;   // committed picture change
     stagedAvatar = null;
     // bodyweight goes through the shared applyBodyweight (logs the trend + recomputes
