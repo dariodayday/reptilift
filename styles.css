@@ -643,13 +643,22 @@ body {
 .acctchip:active { transform: scale(.98); }
 .acctchip .ac-ico { font-size: 15px; }
 
-/* ===== account / cloud-sync section (Menu) ===== */
-.account {
-  margin: 18px 0 4px; background: var(--card); border: 1px solid var(--line);
-  border-radius: 14px; padding: 16px;
+/* ===== account / cloud-sync — dedicated page ===== */
+.backlink {
+  display: inline-flex; align-items: center; gap: 4px;
+  background: none; border: none; cursor: pointer;
+  color: var(--muted); font-family: inherit; font-size: 15px; font-weight: 700;
+  padding: 4px 0; margin-bottom: 6px;
 }
-.acct-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
-.acct-title { font-size: 16px; font-weight: 800; }
+.backlink:hover { color: var(--text); }
+.acct-pagetitle { text-align: center; margin-top: 6px; margin-bottom: 18px; }
+.account {
+  max-width: 420px; margin: 0 auto 4px;
+  background: var(--card); border: 1px solid var(--line);
+  border-radius: 16px; padding: 22px;
+}
+.acct-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.acct-title { font-size: 17px; font-weight: 800; }
 .acct-state.hidden { display: none; }
 .acct-msg { color: var(--muted); font-size: 13px; line-height: 1.4; margin-bottom: 12px; }
 .acct-form { display: flex; flex-direction: column; gap: 10px; }

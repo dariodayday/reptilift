@@ -1,4 +1,6 @@
-// Reptilift v3.3 — earn your beast rank per exercise from your MMR.
+// Reptilift v3.4 — earn your beast rank per exercise from your MMR.
+// v3.4 moves Account/Cloud Sync to its own dedicated page (#account-page),
+// reached from the top ☁️ chip; it's not a bottom tab so no tab is active there.
 // v3.2 adds optional email+password accounts + Supabase cloud sync (see the
 // "cloud sync" section near the bottom). Fully local/guest experience is
 // unchanged when Supabase isn't configured or nobody is logged in.
@@ -405,6 +407,9 @@ function maybeAutoFreeze() {
 
 // ===== navigation =====
 function switchTab(name) {
+  // account-page is a dedicated screen reached via the cloud chip, NOT a bottom
+  // tab — so no tab gets the active state while it's showing (clean, nothing
+  // looks half-selected). Every real tab still matches by data-tab.
   document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("active", t.dataset.tab === name));
   document.querySelectorAll(".panel").forEach((p) => p.classList.toggle("active", p.id === name));
   if (name === "home") renderHome();
@@ -1813,12 +1818,11 @@ if (ax.logout) ax.logout.addEventListener("click", async () => {
   onLogout();
 });
 
-// Clicking the top "Sign in" chip should visibly surface the account form, not
-// just silently switch tabs. Bring the card into view and focus the email field.
+// Clicking the top "Sign in" chip opens the dedicated Account page (its own
+// screen). When logged out, focus the email field as a nice touch.
 if (ax.chip) ax.chip.addEventListener("click", () => {
-  if (typeof switchTab === "function") switchTab("home");
-  if (ax.wrap) ax.wrap.scrollIntoView({ behavior: "smooth", block: "center" });
-  if (!cloudUser && ax.email) setTimeout(() => { try { ax.email.focus(); } catch (e) {} }, 350);
+  if (typeof switchTab === "function") switchTab("account-page");
+  if (!cloudUser && ax.email) setTimeout(() => { try { ax.email.focus(); } catch (e) {} }, 300);
 });
 
 // retry a pending push when the network comes back

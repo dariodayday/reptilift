@@ -36,7 +36,7 @@
 
     <div class="walletbar">
       <button class="walletchip" data-go="shop"><span class="wc-coin">🦎</span> <b data-wallet>0</b> <span class="wc-cur">Scales</span></button>
-      <button class="acctchip" id="acctChip" data-go="home"><span class="ac-ico">☁️</span> <span class="ac-lbl" id="acctChipLbl">Sign in</span></button>
+      <button class="acctchip" id="acctChip"><span class="ac-ico">☁️</span> <span class="ac-lbl" id="acctChipLbl">Sign in</span></button>
     </div>
 
     <!-- MENU -->
@@ -56,11 +56,17 @@
         <div class="stat"><span id="statTop">0</span><label>top 1RM</label></div>
         <div class="stat"><span id="statExers">0</span><label>ranked lifts</label></div>
       </div>
+    </section>
 
-      <!-- ACCOUNT / CLOUD SYNC -->
+    <!-- ACCOUNT / CLOUD SYNC (dedicated page) -->
+    <section id="account-page" class="panel">
+      <button class="backlink" data-go="home" type="button">← Menu</button>
+      <h2 class="section-title acct-pagetitle">Account</h2>
+
+      <!-- account wrapper (handle id kept intact for cloud-sync JS) -->
       <div class="account" id="account">
         <div class="acct-head">
-          <h3 class="acct-title">☁️ Account &amp; Cloud Sync</h3>
+          <h3 class="acct-title">☁️ Cloud Sync</h3>
           <span class="syncdot" id="syncDot" title="sync status"></span>
         </div>
 
@@ -191,7 +197,7 @@
     </section>
 
     <footer class="footer">
-      Reptilift v8.7 — rough cut
+      Reptilift v8.8 — rough cut
       <button id="replayIntro" class="replay">↻ replay intro</button>
     </footer>
 
