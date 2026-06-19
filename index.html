@@ -36,12 +36,21 @@
 
     <div class="walletbar">
       <button class="walletchip" data-go="shop"><span class="wc-coin">🦎</span> <b data-wallet>0</b> <span class="wc-cur">Scales</span></button>
-      <button class="acctchip" id="acctChip"><span class="ac-ico">☁️</span> <span class="ac-lbl" id="acctChipLbl">Sign in</span></button>
+      <button class="acctchip" id="acctChip"><span class="ac-ico" id="acctChipAvatar">🦎</span> <span class="ac-lbl" id="acctChipLbl">Profile</span></button>
     </div>
 
     <!-- MENU -->
     <section id="home" class="panel active">
       <div class="rankhero" id="rankHero"></div>
+
+      <button class="profilelink" data-go="profile-page" type="button">
+        <span class="pl-avatar" id="menuProfileAvatar">🦎</span>
+        <span class="pl-main">
+          <span class="pl-name" id="menuProfileName">Your Profile</span>
+          <span class="pl-sub">Picture, name, bio &amp; stats</span>
+        </span>
+        <span class="pl-arrow">›</span>
+      </button>
 
       <!-- daily-quests widget: at-a-glance view of TODAY'S dailies, shares the
            row builder + claim logic with the Quests page (see renderHomeQuests) -->
@@ -104,6 +113,48 @@
           </div>
           <button class="btn ghost" id="acctLogout" type="button">Log out</button>
         </div>
+      </div>
+    </section>
+
+    <!-- PROFILE (dedicated page) — reached from the avatar chip + the Menu button -->
+    <section id="profile-page" class="panel">
+      <button class="backlink" data-go="home" type="button">← Menu</button>
+      <h2 class="section-title acct-pagetitle">Profile</h2>
+
+      <!-- read-only profile header: big avatar, name, overall rank + MMR, stats -->
+      <div class="profilehero" id="profileHero"></div>
+      <div class="profilestats" id="profileStats"></div>
+
+      <!-- editable fields -->
+      <div class="profileedit">
+        <h3 class="acct-title pe-title">Edit Profile</h3>
+
+        <div class="pe-avatarrow">
+          <span class="pe-avatar" id="peAvatarPreview">🦎</span>
+          <div class="pe-avatarbtns">
+            <button class="btn ghost" id="peAvatarPick" type="button">📷 Choose picture</button>
+            <button class="btn ghost" id="peAvatarRemove" type="button">Remove</button>
+          </div>
+          <input type="file" id="peAvatarInput" accept="image/*" class="hidden" />
+        </div>
+
+        <label class="pe-label">Display name
+          <input type="text" id="peName" maxlength="24" placeholder="e.g. Beast Mode" autocomplete="off" />
+        </label>
+
+        <label class="pe-label">Bio
+          <textarea id="peBio" maxlength="160" rows="3" placeholder="Say something about your training…"></textarea>
+          <span class="pe-counter" id="peBioCount">0 / 160</span>
+        </label>
+
+        <label class="pe-label">Bodyweight (lbs)
+          <input type="number" id="peBw" min="0" inputmode="numeric" placeholder="used to rank bodyweight lifts" />
+        </label>
+
+        <button class="btn" id="peSave" type="button">Save Profile</button>
+        <span class="pe-saved hidden" id="peSaved">Saved ✓</span>
+
+        <button class="btn ghost pe-account" data-go="account-page" type="button">☁️ Account &amp; Cloud Sync</button>
       </div>
     </section>
 
@@ -242,7 +293,7 @@
     </section>
 
     <footer class="footer">
-      Reptilift v9.2 — rough cut
+      Reptilift v9.3 — rough cut
       <button id="replayIntro" class="replay">↻ replay intro</button>
     </footer>
 

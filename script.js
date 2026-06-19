@@ -1,4 +1,10 @@
-// Reptilift v3.8 — earn your beast rank per exercise from your MMR.
+// Reptilift v3.9 — earn your beast rank per exercise from your MMR.
+// v3.9 adds a dedicated Profile page (#profile-page) reached from the top avatar
+// chip + a Menu button. Profile picture (downscaled to 256px JPEG data URL),
+// display name, and bio all live inside the existing reptilift_profile object so
+// they sync to the cloud automatically (no new key). Bodyweight is editable there
+// too and still feeds logBodyweight()/the trend chart. The avatar also shows on
+// the shareable rank card. Account & Cloud Sync stays one tap away from Profile.
 // v3.6 adds a Progress screen (inline-SVG charts of overall MMR over time, per-lift
 // MMR, bodyweight trend, and per-session volume — all reconstructed from stored
 // sets/workouts) plus a shareable rank card rendered to <canvas> (native Web Share
@@ -223,6 +229,13 @@ const BASE_EXERCISES = [
 
 // ===== state =====
 let profile = JSON.parse(localStorage.getItem("reptilift_profile") || '{"bodyweight":null}');
+// guard the profile shape: older saves only had {bodyweight}. name/bio/avatar are
+// optional strings; avatar is a (possibly large) data URL. Normalize defensively so
+// nothing downstream throws on a missing/corrupt field.
+if (!profile || typeof profile !== "object") profile = { bodyweight: null };
+if (typeof profile.name !== "string") profile.name = "";
+if (typeof profile.bio !== "string") profile.bio = "";
+if (typeof profile.avatar !== "string") profile.avatar = "";
 let sets = JSON.parse(localStorage.getItem("reptilift_sets") || "[]");   // every set, all time
 let bests = JSON.parse(localStorage.getItem("reptilift_bests") || "{}"); // exId -> {beast, oneRM, date}
 let customEx = JSON.parse(localStorage.getItem("reptilift_customex") || "[]");
@@ -447,6 +460,7 @@ function switchTab(name) {
   if (name === "shop") renderShop();
   if (name === "quests") renderQuests();
   if (name === "progress") renderProgress();
+  if (name === "profile-page") renderProfile();
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 document.querySelectorAll(".tab").forEach((tab) => tab.addEventListener("click", () => switchTab(tab.dataset.tab)));
@@ -455,8 +469,11 @@ document.querySelectorAll("[data-go]").forEach((btn) => btn.addEventListener("cl
 // ===== profile bodyweight =====
 const bwInput = document.getElementById("bw");
 if (profile.bodyweight) bwInput.value = profile.bodyweight;
-bwInput.addEventListener("change", () => {
-  profile.bodyweight = parseInt(bwInput.value, 10) || null;
+// Apply a new bodyweight value (shared by the Log bodyweight input AND the Profile
+// page's bodyweight field so the two stay in sync). Logs a dated entry for the
+// trend chart and recomputes every best's MMR/beast under the new bodyweight.
+function applyBodyweight(val) {
+  profile.bodyweight = parseInt(val, 10) || null;
   if (profile.bodyweight) logBodyweight(profile.bodyweight);   // dated entry for the trend chart
   // anchor curves scale with bodyweight, so recompute every best's MMR from its
   // stored oneRM, then re-derive the (MMR-driven) beast rank for each record.
@@ -469,9 +486,14 @@ bwInput.addEventListener("change", () => {
       v.beast = nb ? nb.id : null;
     }
   }
+  // keep both bodyweight inputs in sync
+  if (bwInput && document.activeElement !== bwInput) bwInput.value = profile.bodyweight || "";
+  const peBw = document.getElementById("peBw");
+  if (peBw && document.activeElement !== peBw) peBw.value = profile.bodyweight || "";
   save();
   renderHome();
-});
+}
+bwInput.addEventListener("change", () => applyBodyweight(bwInput.value));
 
 // ===== rank-up sound + haptics =====
 // Self-contained: SFX are synthesized with the Web Audio API (no files/network).
@@ -1490,6 +1512,179 @@ function renderHome() {
   document.getElementById("statTop").textContent = top ? top.toLocaleString() : "0";
   document.getElementById("statExers").textContent = Object.keys(bests).length;
   renderHomeQuests();
+  refreshAvatars();
+}
+
+// ===== profile =====
+// All profile data lives in the shared `profile` object (reptilift_profile), which
+// is already in SYNC_KEYS — so saving it auto-pushes to the cloud and applyCloud()
+// brings the avatar/name/bio down on other devices.
+
+// avatar markup: the user's picture if set, else the 🦎 fallback. `cls` is added
+// to the wrapping element so each caller can size/style it.
+function avatarInner() {
+  return profile.avatar
+    ? `<img src="${profile.avatar}" alt="" />`
+    : "🦎";
+}
+// keep every on-screen avatar (top chip + menu link) in sync with the stored one.
+function refreshAvatars() {
+  const chip = document.getElementById("acctChipAvatar");
+  if (chip) chip.innerHTML = avatarInner();
+  const menuAv = document.getElementById("menuProfileAvatar");
+  if (menuAv) menuAv.innerHTML = avatarInner();
+  const menuName = document.getElementById("menuProfileName");
+  if (menuName) menuName.textContent = profile.name ? profile.name : "Your Profile";
+}
+
+// earliest dated activity (workout or set) → a "Member since" string, or null.
+function memberSince() {
+  let earliest = null;
+  sets.forEach((s) => { if (s.date && (!earliest || s.date < earliest)) earliest = s.date; });
+  workouts.forEach((w) => { if (w.date && (!earliest || w.date < earliest)) earliest = w.date; });
+  if (!earliest) return null;
+  const [y, m, d] = earliest.split("-").map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString(undefined, { month: "short", year: "numeric" });
+}
+
+// the highest-MMR ranked exercise → { name, beast } or null.
+function topLift() {
+  let best = null;
+  for (const id in bests) {
+    const rec = bests[id];
+    if (!rec || typeof rec.mmr !== "number") continue;
+    if (!best || rec.mmr > best.mmr) best = { id, mmr: rec.mmr };
+  }
+  if (!best) return null;
+  const ex = exById(best.id);
+  return { name: ex ? ex.name : best.id, beast: classify(best.mmr) };
+}
+
+function renderProfile() {
+  const b = overallBeast();
+  const mmr = overallMMR();
+  const hero = document.getElementById("profileHero");
+  if (hero) {
+    hero.style.setProperty("--c", b ? b.color : "#5b6168");
+    const name = profile.name ? profile.name : "Unnamed Lifter";
+    const rankTxt = b ? `${b.emoji} ${b.name}` : "🥚 Unranked";
+    const ms = memberSince();
+    hero.innerHTML = `
+      <div class="ph-avatar">${avatarInner()}</div>
+      <div class="ph-name">${escapeHtml(name)}</div>
+      <div class="ph-rank">${rankTxt}</div>
+      <div class="ph-mmr"><span>Overall MMR</span><b>${mmr != null ? mmr.toLocaleString() : "—"}</b></div>
+      ${profile.bio ? `<div class="ph-bio">${escapeHtml(profile.bio)}</div>` : ""}
+      ${ms ? `<div class="ph-member">Member since ${ms}</div>` : ""}`;
+  }
+
+  const statsBox = document.getElementById("profileStats");
+  if (statsBox) {
+    const tl = topLift();
+    const tlTxt = tl ? `${tl.beast ? tl.beast.emoji + " " : ""}${tl.name}` : "—";
+    statsBox.innerHTML = `
+      <div class="pstat"><b>${computeStreak()}</b><span>day streak</span></div>
+      <div class="pstat"><b>${workouts.length.toLocaleString()}</b><span>workouts</span></div>
+      <div class="pstat"><b>${sets.length.toLocaleString()}</b><span>sets logged</span></div>
+      <div class="pstat"><b style="font-size:15px;line-height:1.5">${escapeHtml(tlTxt)}</b><span>top lift</span></div>`;
+  }
+
+  // populate the edit fields from the stored profile
+  const nameI = document.getElementById("peName");
+  const bioI = document.getElementById("peBio");
+  const bwI = document.getElementById("peBw");
+  const av = document.getElementById("peAvatarPreview");
+  if (nameI) nameI.value = profile.name || "";
+  if (bioI) bioI.value = profile.bio || "";
+  if (bwI) bwI.value = profile.bodyweight || "";
+  if (av) av.innerHTML = avatarInner();
+  updateBioCount();
+  refreshAvatars();
+}
+
+// small HTML escaper for user-entered name/bio shown via innerHTML.
+function escapeHtml(s) {
+  return String(s == null ? "" : s)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function updateBioCount() {
+  const bioI = document.getElementById("peBio");
+  const c = document.getElementById("peBioCount");
+  if (bioI && c) c.textContent = `${bioI.value.length} / 160`;
+}
+
+// ---- profile edit wiring ----
+// stagedAvatar holds a freshly-picked (downscaled) data URL until Save; null means
+// "no change", "" means "remove". Lets the user preview before committing.
+let stagedAvatar = null;
+(function wireProfile() {
+  const fileInput = document.getElementById("peAvatarInput");
+  const pickBtn = document.getElementById("peAvatarPick");
+  const removeBtn = document.getElementById("peAvatarRemove");
+  const preview = document.getElementById("peAvatarPreview");
+  const bioI = document.getElementById("peBio");
+  const saveBtn = document.getElementById("peSave");
+  const savedLbl = document.getElementById("peSaved");
+
+  if (pickBtn && fileInput) pickBtn.addEventListener("click", () => fileInput.click());
+  if (fileInput) fileInput.addEventListener("change", (e) => {
+    const f = e.target.files && e.target.files[0];
+    if (!f) return;
+    downscaleImage(f, 256, 0.7).then((dataUrl) => {
+      stagedAvatar = dataUrl;
+      if (preview) preview.innerHTML = `<img src="${dataUrl}" alt="" />`;
+    }).catch(() => { alert("Couldn't read that image. Try another. 🦎"); });
+    fileInput.value = "";   // allow re-picking the same file
+  });
+  if (removeBtn) removeBtn.addEventListener("click", () => {
+    stagedAvatar = "";
+    if (preview) preview.innerHTML = "🦎";
+  });
+  if (bioI) bioI.addEventListener("input", updateBioCount);
+  if (saveBtn) saveBtn.addEventListener("click", () => {
+    const nameI = document.getElementById("peName");
+    const bwI = document.getElementById("peBw");
+    profile.name = (nameI ? nameI.value : "").trim().slice(0, 24);
+    profile.bio = (bioI ? bioI.value : "").trim().slice(0, 160);
+    if (stagedAvatar !== null) profile.avatar = stagedAvatar;   // committed picture change
+    stagedAvatar = null;
+    // bodyweight goes through the shared applyBodyweight (logs the trend + recomputes
+    // MMR + saves profile). When unchanged it's a harmless no-op resave.
+    applyBodyweight(bwI ? bwI.value : profile.bodyweight);
+    save();                          // persist name/bio/avatar (triggers cloud auto-push)
+    refreshAvatars();
+    renderProfile();
+    if (savedLbl) {
+      savedLbl.classList.remove("hidden");
+      setTimeout(() => savedLbl.classList.add("hidden"), 1800);
+    }
+    if (soundOn) blip();
+  });
+})();
+
+// Downscale + center-crop an image File to a square `size`×`size` JPEG data URL at
+// `quality`. Keeps the avatar tiny enough for localStorage AND the cloud JSON blob.
+function downscaleImage(file, size, quality) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const cv = document.createElement("canvas");
+        cv.width = size; cv.height = size;
+        const ctx = cv.getContext("2d");
+        const side = Math.min(img.width, img.height);     // center-crop to a square
+        const sx = (img.width - side) / 2, sy = (img.height - side) / 2;
+        ctx.drawImage(img, sx, sy, side, side, 0, 0, size, size);
+        URL.revokeObjectURL(url);
+        resolve(cv.toDataURL("image/jpeg", quality));
+      } catch (e) { URL.revokeObjectURL(url); reject(e); }
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("img load failed")); };
+    img.src = url;
+  });
 }
 
 // ===== rank-up celebration =====
@@ -1864,6 +2059,28 @@ function drawRankCard() {
   ctx.font = "600 30px Rajdhani, sans-serif";
   ctx.fillText("CLIMB THE FOOD CHAIN", W / 2, 198);
 
+  // profile avatar (circle) + display name, if set. The avatar image is preloaded
+  // before drawRankCard runs (see openRankCard), so cardAvatarImg is ready here;
+  // guarded so a missing/failed image just skips the picture.
+  const hasName = profile.name && profile.name.trim();
+  if ((cardAvatarImg && cardAvatarImg.complete && cardAvatarImg.naturalWidth) || hasName) {
+    const cx = W / 2, cy = 280, r = 60;
+    if (cardAvatarImg && cardAvatarImg.complete && cardAvatarImg.naturalWidth) {
+      ctx.save();
+      ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.closePath(); ctx.clip();
+      ctx.drawImage(cardAvatarImg, cx - r, cy - r, r * 2, r * 2);
+      ctx.restore();
+      ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.strokeStyle = hexA(accent, 0.7); ctx.lineWidth = 4; ctx.stroke();
+    }
+    if (hasName) {
+      ctx.textAlign = "center";
+      ctx.fillStyle = "#eaf5ee";
+      ctx.font = "700 46px Rajdhani, sans-serif";
+      ctx.fillText(profile.name.trim(), W / 2, (cardAvatarImg && cardAvatarImg.complete && cardAvatarImg.naturalWidth) ? 396 : 300);
+    }
+  }
+
   // beast emoji (big)
   ctx.font = "300px sans-serif";
   ctx.shadowColor = accent; ctx.shadowBlur = 60;
@@ -1949,9 +2166,22 @@ function hexA(hex, a) {
   return `rgba(${r},${g},${bl},${a})`;
 }
 
+// preloaded avatar image for the rank card. Loaded from the profile data URL (or
+// cleared if none) before each open; on load it triggers one redraw so the picture
+// lands even if it wasn't ready on the first synchronous draw.
+let cardAvatarImg = null;
 // open the rank-card modal: draw, then show. Fonts may load a beat late on first
 // paint, so redraw shortly after to pick up Rajdhani if it wasn't ready.
 function openRankCard() {
+  // (re)load the avatar so the card can draw it; guarded so failures just skip it.
+  if (profile.avatar) {
+    cardAvatarImg = new Image();
+    cardAvatarImg.onload = () => { try { drawRankCard(); } catch (e) {} };
+    cardAvatarImg.onerror = () => { cardAvatarImg = null; };
+    cardAvatarImg.src = profile.avatar;
+  } else {
+    cardAvatarImg = null;
+  }
   drawRankCard();
   cardModal.classList.remove("hidden");
   setTimeout(drawRankCard, 120);
@@ -2135,7 +2365,8 @@ function setSyncStatus(state) {
   const m = map[state] || map.off;
   if (ax.dot) ax.dot.className = "syncdot " + m.dot;
   if (ax.syncLbl && state !== "off") ax.syncLbl.textContent = m.lbl;
-  if (ax.chipLbl && cloudUser) ax.chipLbl.textContent = m.chip;
+  // NOTE: the top chip now opens the Profile page, so its label stays "Profile"
+  // (sync state lives on the Account page). We intentionally don't relabel it here.
 }
 
 // ---- gatherLocal(): the { key: parsedValue } blob for all present SYNC_KEYS ----
@@ -2250,22 +2481,22 @@ function paintAccount() {
   const hide = (el) => el && el.classList.add("hidden");
   hide(ax.disabled); hide(ax.loggedOut); hide(ax.loggedIn);
 
+  // the top chip is the Profile entry point now — always visible, label fixed.
+  if (ax.chip) ax.chip.classList.remove("hidden");
+
   if (!CLOUD_CONFIGURED) {
     show(ax.disabled);
-    if (ax.chip) ax.chip.classList.add("hidden");   // hide chip when no cloud at all
     setSyncStatus("off");
     return;
   }
   if (cloudUser) {
     show(ax.loggedIn);
     if (ax.emailLbl) ax.emailLbl.textContent = cloudUser.email || "(signed in)";
-    if (ax.chip) { ax.chip.classList.remove("hidden"); }
-    if (ax.chipLbl) ax.chipLbl.textContent = "Synced";
+    const acctAv = document.querySelector("#acctLoggedIn .acct-avatar");
+    if (acctAv) acctAv.innerHTML = (typeof avatarInner === "function") ? avatarInner() : "🦎";
     setSyncStatus("synced");
   } else {
     show(ax.loggedOut);
-    if (ax.chip) ax.chip.classList.remove("hidden");
-    if (ax.chipLbl) ax.chipLbl.textContent = "Sign in";
     if (ax.dot) ax.dot.className = "syncdot";
     paintMode();
   }
@@ -2330,11 +2561,10 @@ if (ax.logout) ax.logout.addEventListener("click", async () => {
   onLogout();
 });
 
-// Clicking the top "Sign in" chip opens the dedicated Account page (its own
-// screen). When logged out, focus the email field as a nice touch.
+// Clicking the top avatar chip opens the Profile page (the user's hub). Account &
+// Cloud Sign-in is one tap away via a button on that page.
 if (ax.chip) ax.chip.addEventListener("click", () => {
-  if (typeof switchTab === "function") switchTab("account-page");
-  if (!cloudUser && ax.email) setTimeout(() => { try { ax.email.focus(); } catch (e) {} }, 300);
+  if (typeof switchTab === "function") switchTab("profile-page");
 });
 
 // retry a pending push when the network comes back
