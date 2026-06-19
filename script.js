@@ -1,4 +1,8 @@
-// Reptilift v3.4 — earn your beast rank per exercise from your MMR.
+// Reptilift v3.5 — earn your beast rank per exercise from your MMR.
+// v3.5 holds rank-up celebrations until you FINISH a workout, then plays them one
+// by one (deduped per lift: start-of-session beast → final beast) before the recap,
+// and pre-fills each exercise's set rows with your last-used weight + reps
+// (reptilift_lastsets; routine target reps win, weight falls back to last-used).
 // v3.4 moves Account/Cloud Sync to its own dedicated page (#account-page),
 // reached from the top ☁️ chip; it's not a bottom tab so no tab is active there.
 // v3.2 adds optional email+password accounts + Supabase cloud sync (see the
@@ -532,6 +536,19 @@ const saveWorkout = () => {
   localStorage.setItem("reptilift_lastsets", JSON.stringify(lastSets));
 };
 const saveRoutines = () => localStorage.setItem("reptilift_routines", JSON.stringify(routines));
+// Most recent remembered values for an exercise, used to pre-fill new set rows.
+// lastSets[exId] is the list of completed sets from the lift's last session; the
+// LAST element is the most recent actual performance. Returns { lbs, reps } where
+// lbs is the entered weight (load lifts) or the added weight (bodyweight lifts),
+// or null if this lift has no history yet.
+function lastSetFor(exId) {
+  const arr = lastSets[exId];
+  if (!Array.isArray(arr) || !arr.length) return null;
+  const s = arr[arr.length - 1];
+  if (!s) return null;
+  const lbs = s.lbs != null && s.lbs !== "" ? s.lbs : (s.added != null && s.added !== "" ? s.added : "");
+  return { lbs, reps: s.reps != null ? s.reps : "" };
+}
 const clock = (s) => `${Math.floor(s / 60)}:${String(Math.max(0, s % 60)).padStart(2, "0")}`;
 
 // visual icon per exercise (stand-in for a movement diagram)
@@ -626,10 +643,19 @@ function startWorkout(routine) {
       const ex = exById(re.exId);
       if (!ex) return;   // tolerate an exId no longer in the catalog
       const n = Math.max(1, parseInt(re.sets, 10) || 1);
-      const reps = re.reps != null && re.reps !== "" ? String(re.reps) : "";
+      // reps precedence: a routine's target rep count wins; otherwise fall back to
+      // the last-remembered reps for this lift. Weight always pre-fills from
+      // last-used (routines don't store weight). startBeast snapshots the lift's
+      // rank at session start so a finish-time celebration can show old→final.
+      const last = lastSetFor(ex.id);
+      const reps = re.reps != null && re.reps !== "" ? String(re.reps)
+        : (last && last.reps != null ? String(last.reps) : "");
+      const lbs = last && last.lbs != null && last.lbs !== "" ? String(last.lbs) : "";
+      const sb = bests[ex.id] ? classify(bests[ex.id].mmr) : null;
       workout.exercises.push({
         exId: ex.id, exName: ex.name, type: ex.type, rest: 90, restOn: true, collapsed: false,
-        sets: Array.from({ length: n }, () => ({ lbs: "", reps, added: "", done: false })),
+        startBeast: sb ? sb.id : null,
+        sets: Array.from({ length: n }, () => ({ lbs, reps, added: "", done: false })),
       });
     });
   }
@@ -652,9 +678,38 @@ function finishWorkout() {
     trackDaily("workouts"); trackLifetime("workouts");
     awardWorkoutCoins(review);   // sets review.coins (idempotent); used by showReview
   }
+  // build the queue of rank-up celebrations to play one by one BEFORE the review.
+  // Dedupe per exercise: one celebration from the lift's rank at session start
+  // (exo.startBeast) to its FINAL rank now, even if it crossed several bands. The
+  // `old` arg decides the variant: null startBeast => egg hatch, else old→new swap.
+  const queue = buildCelebrationQueue(workout);
   workout = null; saveWorkout(); stopTicker(); renderWorkout();
   maybeAutoFreeze();             // protect the streak if a freeze applies
-  showReview(review);   // celebratory recap; the workout is already saved
+  // celebrations first (sequential), then the recap. Zero rank-ups => straight to review.
+  // Suppress the review's own SFX only when celebrations actually played their sounds.
+  playCelebrations(queue, () => showReview(review, queue.length > 0));
+}
+
+// Collect one finish-time celebration per exercise that ranked up this session.
+// Final rank = the lift's current best beast; starting rank = the snapshot taken
+// when the exercise entered the session (exo.startBeast). Only emit when the
+// final tier is strictly above the start tier. Ordered low→high tier so the
+// biggest reveal lands last. Skips abandoned exercises (no completed sets).
+function buildCelebrationQueue(w) {
+  if (!w) return [];
+  const out = [];
+  (w.exercises || []).forEach((exo) => {
+    if (!exo.sets.some((s) => s.done)) return;
+    const ex = exById(exo.exId); if (!ex) return;
+    const rec = bests[exo.exId];
+    const finalBeast = rec ? classify(rec.mmr) : null;
+    if (!finalBeast) return;
+    const startTier = exo.startBeast ? tierOf(exo.startBeast) : 0;
+    if (tierOf(finalBeast.id) <= startTier) return;   // no net rank-up this session
+    const old = exo.startBeast ? byId(exo.startBeast) : null;   // null => egg hatch
+    out.push({ ex, beast: finalBeast, old });
+  });
+  return out.sort((a, b) => tierOf(a.beast.id) - tierOf(b.beast.id));
 }
 
 // effective load for one completed set, consistent with estimate1RM / completeSet:
@@ -681,6 +736,13 @@ function summarizeWorkout(w) {
       const cur = rankupByEx[e.exId];
       if (!cur || tierOf(e.to) > tierOf(cur.to)) rankupByEx[e.exId] = e;
     }
+  });
+  // align the review's rank-up rows with the finish-time celebrations: show the
+  // jump as session-start beast → final beast (not the last intermediate band),
+  // so a lift that crossed several bands reads as one clean old→new.
+  (w.exercises || []).forEach((exo) => {
+    const ru = rankupByEx[exo.exId];
+    if (ru) ru.from = exo.startBeast || null;
   });
   let topBeast = null;
   (w.exercises || []).forEach((exo) => {
@@ -721,7 +783,9 @@ function summarizeWorkout(w) {
 // Celebratory recap shown at finish time. The workout is already filed into history
 // by the time this runs; "Done" simply dismisses and returns to the Menu.
 const reviewModal = document.getElementById("reviewModal");
-function showReview(r) {
+// `silent` suppresses the review's own rank-up SFX/haptics — used when sequential
+// finish-time celebrations already played their sounds, so we don't double up.
+function showReview(r, silent) {
   if (!r) return;
   const body = document.getElementById("reviewBody");
   const fmtDur = (s) => s >= 3600 ? `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m` : `${Math.floor(s / 60)}m ${s % 60}s`;
@@ -788,7 +852,7 @@ function showReview(r) {
     ${rankupHtml}
     ${exHtml}`;
   reviewModal.classList.remove("hidden");
-  if (soundOn && (r.rankups.length || r.overallChanged)) { playRankUpSfx(); buzz([40, 60, 40]); }
+  if (!silent && soundOn && (r.rankups.length || r.overallChanged)) { playRankUpSfx(); buzz([40, 60, 40]); }
 }
 document.getElementById("reviewDone").addEventListener("click", () => {
   reviewModal.classList.add("hidden");
@@ -797,7 +861,11 @@ document.getElementById("reviewDone").addEventListener("click", () => {
 function addExerciseToWorkout(exId) {
   if (!workout) startWorkout();
   const ex = exById(exId); if (!ex) return;
-  workout.exercises.push({ exId: ex.id, exName: ex.name, type: ex.type, rest: 90, restOn: true, collapsed: false, sets: [{ lbs: "", reps: "", added: "", done: false }] });
+  const last = lastSetFor(ex.id);   // pre-fill weight + reps from last performance
+  const lbs = last && last.lbs != null && last.lbs !== "" ? String(last.lbs) : "";
+  const reps = last && last.reps != null && last.reps !== "" ? String(last.reps) : "";
+  const sb = bests[ex.id] ? classify(bests[ex.id].mmr) : null;   // rank at entry, for finish-time celebration
+  workout.exercises.push({ exId: ex.id, exName: ex.name, type: ex.type, rest: 90, restOn: true, collapsed: false, startBeast: sb ? sb.id : null, sets: [{ lbs, reps, added: "", done: false }] });
   saveWorkout(); renderWorkout();
 }
 
@@ -861,8 +929,12 @@ function completeSet(i, j) {
   if (newMmrPr) trackDaily("prs");
   if (rankedUp && bestBeast) trackLifetime("rankups");
   if (exo.restOn) workout.restEnd = Date.now() + exo.rest * 1000;
+  // remember this performance so the lift's next set rows pre-fill (most recent
+  // actual values: weight + reps for load lifts, added weight + reps for bw).
+  lastSets[ex.id] = [{ lbs: s.lbs, reps: s.reps, added: added }];
+  // NOTE: rank-ups are NOT celebrated mid-workout anymore — they're recorded in
+  // workout.events above and played back one by one at finishWorkout().
   save(); saveWorkout(); renderWorkout(); tick();
-  if (rankedUp && bestBeast) celebrate(bestBeast, ex, prevBeast);
 }
 
 // timers
@@ -1378,7 +1450,10 @@ function renderHome() {
 // Two flavors, picked by `old`:
 //   old == null  → user was UNRANKED (egg state). Egg-hatch reveal.
 //   old present  → real prior beast. Old badge morphs/flips out, new badge reveals.
-function celebrate(b, ex, old) {
+// Show one rank-up celebration. `old` null => egg-hatch; a beast => old→new swap.
+// `done` (optional) fires once when the celebration is dismissed (tap or auto),
+// exactly once — used to chain queued celebrations one by one at workout finish.
+function celebrate(b, ex, old, done) {
   const ru = document.getElementById("rankup");
   ru.style.setProperty("--c", b.color);
   const sub = `MMR ${beastRange(b)} on ${ex.name}`;
@@ -1413,9 +1488,34 @@ function celebrate(b, ex, old) {
     if (old) { playRankUpSfx(); buzz([40, 60, 40]); }            // swap: double pulse
     else { playHatchSfx(); buzz([30, 50, 30, 50, 120]); }        // hatch: longer flourish
   }
-  const close = () => { ru.classList.add("hidden"); ru.removeEventListener("click", close); };
+  // dismissal is one-shot: whichever of tap / auto-timeout fires first wins, then
+  // both the listener and the timer are torn down so we can't double-advance.
+  let closed = false;
+  let timer = null;
+  const close = () => {
+    if (closed) return;
+    closed = true;
+    if (timer) { clearTimeout(timer); timer = null; }
+    ru.classList.add("hidden");
+    ru.removeEventListener("click", close);
+    if (typeof done === "function") done();
+  };
   ru.addEventListener("click", close);
-  window.setTimeout(close, 3600);
+  timer = window.setTimeout(close, 3600);
+}
+
+// Play a list of queued rank-up celebrations one by one, then run `after`.
+// Each entry is { beast, ex, old } (old null => egg hatch). The next celebration
+// only starts once the previous is dismissed (tap or auto-timeout), so they never
+// stack. Empty queue jumps straight to `after`.
+function playCelebrations(queue, after) {
+  let k = 0;
+  const next = () => {
+    if (k >= queue.length) { if (typeof after === "function") after(); return; }
+    const c = queue[k++];
+    celebrate(c.beast, c.ex, c.old, next);
+  };
+  next();
 }
 
 // ===== history =====
