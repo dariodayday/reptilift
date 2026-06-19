@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover" />
+  <title>Reptilift — train like a beast</title>
+  <meta name="theme-color" content="#0c0e0d" />
+  <link rel="manifest" href="manifest.json" />
+  <link rel="icon" href="favicon.png" />
+  <link rel="apple-touch-icon" href="apple-touch-icon.png" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <!-- STARTUP ANIMATION: eyes glow in the dark, then the logo wipes in around them -->
+  <div id="intro" class="intro">
+    <div class="stage">
+      <img class="intro-logo" src="intro-logo.png" alt="REPTILIFT" />
+      <div class="eye" style="left:18.2%;top:43.5%;width:7%;"><div class="slit"></div><div class="glint"></div></div>
+      <div class="eye" style="left:40.4%;top:45.2%;width:6.5%;"><div class="slit"></div><div class="glint"></div></div>
+    </div>
+  </div>
+
+  <div id="app">
+    <header class="topbar">
+      <div class="logo-wrap">
+        <img class="logo-img" src="logo.png" alt="REPTILIFT" />
+        <img class="logo-eyes" src="introeyes.png" alt="" />
+      </div>
+      <p class="tagline">Earn your rank. Climb the food chain.</p>
+    </header>
+
+    <div class="walletbar">
+      <button class="walletchip" data-go="shop"><span class="wc-coin">🦎</span> <b data-wallet>0</b> <span class="wc-cur">Scales</span></button>
+      <button class="acctchip" id="acctChip" data-go="home"><span class="ac-ico">☁️</span> <span class="ac-lbl" id="acctChipLbl">Sign in</span></button>
+    </div>
+
+    <!-- MENU -->
+    <section id="home" class="panel active">
+      <div class="rankhero" id="rankHero"></div>
+      <nav class="menu">
+        <button class="menu-btn" data-go="log"><span>🏋️</span> Log a Workout</button>
+        <button class="menu-btn" data-go="routines"><span>📋</span> Routines</button>
+        <button class="menu-btn" data-go="ranks"><span>🏆</span> My Ranks</button>
+        <button class="menu-btn" data-go="quests"><span>🎯</span> Quests</button>
+        <button class="menu-btn" data-go="shop"><span>🛒</span> Shop</button>
+        <button class="menu-btn" data-go="history"><span>📜</span> History</button>
+        <button class="menu-btn gold" id="flexBtn"><span>💪</span> Flex Card</button>
+      </nav>
+      <div class="statbar">
+        <div class="stat"><span id="statStreak">0</span><label>day streak</label></div>
+        <div class="stat"><span id="statTop">0</span><label>top 1RM</label></div>
+        <div class="stat"><span id="statExers">0</span><label>ranked lifts</label></div>
+      </div>
+
+      <!-- ACCOUNT / CLOUD SYNC -->
+      <div class="account" id="account">
+        <div class="acct-head">
+          <h3 class="acct-title">☁️ Account &amp; Cloud Sync</h3>
+          <span class="syncdot" id="syncDot" title="sync status"></span>
+        </div>
+
+        <!-- shown when Supabase isn't configured yet -->
+        <div id="acctDisabled" class="acct-state hidden">
+          <p class="acct-msg">Cloud sync isn’t set up yet. Your progress is saved on this device.</p>
+        </div>
+
+        <!-- logged OUT: email + password form -->
+        <div id="acctLoggedOut" class="acct-state hidden">
+          <p class="acct-msg" id="acctIntro">Save your progress to the cloud so it follows you to your phone.</p>
+          <form id="acctForm" class="acct-form" autocomplete="on">
+            <input id="acctEmail" type="email" placeholder="email" autocomplete="email" required />
+            <input id="acctPass" type="password" placeholder="password" autocomplete="current-password" minlength="6" required />
+            <div class="acct-err" id="acctErr"></div>
+            <button class="btn" id="acctSubmit" type="submit">Log in</button>
+          </form>
+          <button class="acct-toggle" id="acctToggle" type="button">Need an account? <b>Sign up</b></button>
+        </div>
+
+        <!-- logged IN -->
+        <div id="acctLoggedIn" class="acct-state hidden">
+          <div class="acct-who">
+            <span class="acct-avatar">🦎</span>
+            <div>
+              <div class="acct-email" id="acctEmailLbl">—</div>
+              <div class="acct-sync" id="acctSyncLbl">Synced ✓</div>
+            </div>
+          </div>
+          <button class="btn ghost" id="acctLogout" type="button">Log out</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- RANKS -->
+    <section id="ranks" class="panel">
+      <h2 class="section-title">Your Ranks</h2>
+      <div id="yourRanks" class="yourranks"></div>
+      <h2 class="section-title">The Food Chain</h2>
+      <p class="hint">Eight ranks. Earn MMR (0–800) by lifting big for your bodyweight — your overall rank is the average MMR across all your ranked lifts.</p>
+      <div id="rankGrid" class="grid"></div>
+    </section>
+
+    <!-- ROUTINES -->
+    <section id="routines" class="panel">
+      <h2 class="section-title">Routines</h2>
+      <p class="hint">Build a reusable template, then start a workout pre-loaded with its exercises.</p>
+      <button class="btn" id="routineNewBtn">＋ New Routine</button>
+      <div id="routineList" class="routinelist"></div>
+    </section>
+
+    <!-- LOG / WORKOUT -->
+    <section id="log" class="panel">
+      <h2 class="section-title">Workout</h2>
+
+      <div class="profilebar">
+        <label>Your bodyweight (lbs)
+          <input type="number" id="bw" placeholder="set it once" min="0" inputmode="numeric" />
+        </label>
+        <span class="profilehint">used to rank bodyweight lifts</span>
+        <label class="soundtoggle">
+          <input type="checkbox" id="soundToggle" checked /> 🔊 Rank-up sound
+        </label>
+      </div>
+
+      <!-- no active session -->
+      <div id="sessionStart">
+        <button class="btn big" id="startBtn">▶ Start Workout</button>
+        <p class="hint">Start a session, add machines &amp; exercises, log your sets.
+          A rest timer kicks off after each set, and every lift earns its own rank.</p>
+      </div>
+
+      <!-- active session -->
+      <div id="sessionActive" class="hidden">
+        <div class="workout-bar">
+          <div class="wb-timer">⏱ <span id="sessTimer">0:00</span></div>
+          <button class="btn danger" id="finishBtn">Finish</button>
+        </div>
+
+        <div id="restBanner" class="rest hidden">
+          <span class="rest-label">REST</span>
+          <b id="restTime">1:30</b>
+          <button class="rest-btn" id="restPlus">+30s</button>
+          <button class="rest-btn" id="restSkip">Skip</button>
+        </div>
+
+        <div id="exerciseList"></div>
+
+        <div class="addex">
+          <button class="btn ghost" id="addExBtn">＋ Add exercise / machine</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- HISTORY -->
+    <section id="history" class="panel">
+      <h2 class="section-title">History</h2>
+      <div id="historyStreak" class="streakbanner"></div>
+      <h3 class="sub">Personal Records</h3>
+      <div id="prList" class="yourranks"></div>
+      <h3 class="sub">Workout Log</h3>
+      <div id="dayList" class="daylist"></div>
+    </section>
+
+    <!-- QUESTS -->
+    <section id="quests" class="panel">
+      <div class="econ-head">
+        <h2 class="section-title">Quests</h2>
+        <div class="walletchip lg"><span class="wc-coin">🦎</span> <b data-wallet>0</b> <span class="wc-cur">Scales</span></div>
+      </div>
+      <p class="hint">Finish quests to earn 🦎 Scales. Daily quests reset every day.</p>
+      <h3 class="sub">Daily</h3>
+      <div id="dailyQuests" class="questlist"></div>
+      <h3 class="sub">Milestones</h3>
+      <div id="milestoneQuests" class="questlist"></div>
+    </section>
+
+    <!-- SHOP -->
+    <section id="shop" class="panel">
+      <div class="econ-head">
+        <h2 class="section-title">Shop</h2>
+        <div class="walletchip lg"><span class="wc-coin">🦎</span> <b data-wallet>0</b> <span class="wc-cur">Scales</span></div>
+      </div>
+      <p class="hint">Spend 🦎 Scales on streak protection and coin boosts.</p>
+      <div id="shopList" class="shoplist"></div>
+      <h3 class="sub">Inventory</h3>
+      <div id="inventoryList" class="invlist"></div>
+    </section>
+
+    <footer class="footer">
+      Reptilift v8.5 — rough cut
+      <button id="replayIntro" class="replay">↻ replay intro</button>
+    </footer>
+
+    <nav class="tabbar" aria-label="Main navigation">
+      <button class="tab active" data-tab="home"><span class="tab-ico">🦎</span><span class="tab-lbl">Menu</span></button>
+      <button class="tab" data-tab="ranks"><span class="tab-ico">🏆</span><span class="tab-lbl">Ranks</span></button>
+      <button class="tab" data-tab="routines"><span class="tab-ico">📋</span><span class="tab-lbl">Routines</span></button>
+      <button class="tab" data-tab="log"><span class="tab-ico">🏋️</span><span class="tab-lbl">Log</span></button>
+      <button class="tab" data-tab="quests"><span class="tab-ico">🎯</span><span class="tab-lbl">Quests</span></button>
+      <button class="tab" data-tab="shop"><span class="tab-ico">🛒</span><span class="tab-lbl">Shop</span></button>
+      <button class="tab" data-tab="history"><span class="tab-ico">📜</span><span class="tab-lbl">History</span></button>
+    </nav>
+  </div>
+
+  <!-- POST-WORKOUT REVIEW -->
+  <div id="reviewModal" class="modal hidden">
+    <div class="modal-inner">
+      <div class="reviewcard">
+        <div id="reviewBody"></div>
+        <button class="btn" id="reviewDone">Done</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ROUTINE BUILDER / EDITOR -->
+  <div id="routineEditor" class="picker hidden">
+    <div class="picker-inner">
+      <div class="picker-head">
+        <h3 id="routineEditTitle" class="rt-edit-title">New Routine</h3>
+        <button id="routineEditClose" class="picker-close">✕</button>
+      </div>
+      <input id="routineNameInput" class="rt-name-input" type="text" placeholder="Routine name (e.g. Push Day)" autocomplete="off" />
+      <div id="routineExList" class="picker-list rt-exlist"></div>
+      <button class="btn ghost" id="routineAddExBtn">＋ Add exercise</button>
+      <button class="btn" id="routineSaveBtn">Save Routine</button>
+    </div>
+  </div>
+
+  <!-- FLEX CARD (share/screenshot) -->
+  <div id="flexModal" class="modal hidden">
+    <div class="modal-inner">
+      <div class="flexcard" id="flexCard"></div>
+      <button class="btn" id="flexClose">Close</button>
+      <p class="sharehint">Screenshot it for the group chat 📸</p>
+    </div>
+  </div>
+
+  <!-- RANK-UP CELEBRATION -->
+  <div id="rankup" class="rankup hidden"></div>
+
+  <!-- EXERCISE PICKER -->
+  <div id="exPicker" class="picker hidden">
+    <div class="picker-inner">
+      <div class="picker-head">
+        <input id="exSearch" type="text" placeholder="Search exercises…" autocomplete="off" />
+        <button id="exPickerClose" class="picker-close">✕</button>
+      </div>
+      <div id="exPickerList" class="picker-list"></div>
+      <button class="btn" id="exCustomBtn">＋ New custom exercise</button>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="supabase-config.js"></script>
+  <script src="script.js"></script>
+</body>
+</html>

@@ -1,0 +1,5 @@
+# backups / scratch — not part of the app
+exercises_backup_*/
+*.bak
+logo_orig.png
+.DS_Store
