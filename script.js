@@ -1,4 +1,9 @@
-// Reptilift v3.5 — earn your beast rank per exercise from your MMR.
+// Reptilift v3.6 — earn your beast rank per exercise from your MMR.
+// v3.6 adds a Progress screen (inline-SVG charts of overall MMR over time, per-lift
+// MMR, bodyweight trend, and per-session volume — all reconstructed from stored
+// sets/workouts) plus a shareable rank card rendered to <canvas> (native Web Share
+// with a PNG file when available, download fallback otherwise). New key
+// reptilift_bwlog stores dated bodyweight entries; it's in SYNC_KEYS too.
 // v3.5 holds rank-up celebrations until you FINISH a workout, then plays them one
 // by one (deduped per lift: start-of-session beast → final beast) before the recap,
 // and pre-fills each exercise's set rows with your last-used weight + reps
@@ -23,10 +28,10 @@
 // and (b) we're NOT mid-apply of a cloud save (cloudSuppress guards that loop).
 // Non-reptilift writes (incl. Supabase's own session keys) pass straight through.
 const SYNC_KEYS = [
-  "reptilift_active", "reptilift_bests", "reptilift_customex", "reptilift_inventory",
-  "reptilift_lastsets", "reptilift_profile", "reptilift_quests", "reptilift_routines",
-  "reptilift_sets", "reptilift_sound", "reptilift_streak", "reptilift_wallet",
-  "reptilift_workouts",
+  "reptilift_active", "reptilift_bests", "reptilift_bwlog", "reptilift_customex",
+  "reptilift_inventory", "reptilift_lastsets", "reptilift_profile", "reptilift_quests",
+  "reptilift_routines", "reptilift_sets", "reptilift_sound", "reptilift_streak",
+  "reptilift_wallet", "reptilift_workouts",
 ];
 let cloudUser = null;        // set to the Supabase user once logged in
 let cloudSuppress = false;   // true while applyCloud() is writing keys (don't echo back)
@@ -222,6 +227,24 @@ let sets = JSON.parse(localStorage.getItem("reptilift_sets") || "[]");   // ever
 let bests = JSON.parse(localStorage.getItem("reptilift_bests") || "{}"); // exId -> {beast, oneRM, date}
 let customEx = JSON.parse(localStorage.getItem("reptilift_customex") || "[]");
 let soundOn = localStorage.getItem("reptilift_sound") !== "off";  // default ON; gates SFX + haptics
+// dated bodyweight history for the Progress trend. [{date:"YYYY-MM-DD", bw:Number}]
+// (one entry per day — same-day changes overwrite). Seeded below from the current
+// profile bodyweight if the log is empty but a bodyweight is already set.
+let bwLog = JSON.parse(localStorage.getItem("reptilift_bwlog") || "[]");
+if (!Array.isArray(bwLog)) bwLog = [];
+function saveBwLog() { localStorage.setItem("reptilift_bwlog", JSON.stringify(bwLog)); }
+// record today's bodyweight, replacing any existing entry for today; keeps the log
+// sorted by date. No-op for falsy/invalid weights.
+function logBodyweight(bw) {
+  if (!bw || bw <= 0) return;
+  const d = todayStr();
+  const i = bwLog.findIndex((e) => e.date === d);
+  if (i >= 0) bwLog[i].bw = bw; else bwLog.push({ date: d, bw });
+  bwLog.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+  saveBwLog();
+}
+// seed the log once from the existing profile bodyweight so first-time chart isn't blank.
+if (!bwLog.length && profile.bodyweight) logBodyweight(profile.bodyweight);
 
 // ===== economy state ("Scales" 🦎 — the in-app currency) =====
 // wallet:   { balance } running coin balance.
@@ -422,6 +445,7 @@ function switchTab(name) {
   if (name === "history") renderHistory();
   if (name === "shop") renderShop();
   if (name === "quests") renderQuests();
+  if (name === "progress") renderProgress();
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 document.querySelectorAll(".tab").forEach((tab) => tab.addEventListener("click", () => switchTab(tab.dataset.tab)));
@@ -432,6 +456,7 @@ const bwInput = document.getElementById("bw");
 if (profile.bodyweight) bwInput.value = profile.bodyweight;
 bwInput.addEventListener("change", () => {
   profile.bodyweight = parseInt(bwInput.value, 10) || null;
+  if (profile.bodyweight) logBodyweight(profile.bodyweight);   // dated entry for the trend chart
   // anchor curves scale with bodyweight, so recompute every best's MMR from its
   // stored oneRM, then re-derive the (MMR-driven) beast rank for each record.
   if (profile.bodyweight) {
@@ -1595,6 +1620,369 @@ document.getElementById("flexBtn").addEventListener("click", () => {
 });
 document.getElementById("flexClose").addEventListener("click", () => flexModal.classList.add("hidden"));
 flexModal.addEventListener("click", (e) => { if (e.target === flexModal) flexModal.classList.add("hidden"); });
+
+// ===== progress charts =====
+// All charts are hand-drawn inline SVG (no libs) so they work offline in the PWA.
+// They're responsive (viewBox + width:100%), readable on a phone, gold-on-dark, and
+// degrade gracefully: an empty series shows a friendly message, a single point shows
+// a dot + note, a flat line still renders (min/max collapse handled).
+
+// Build a responsive line/area chart SVG from a series of { x:Date-ish label, v:Number }.
+// pts: [{ label, value }]; opts: { unit, color, fmt, area }. Returns an HTML string.
+function svgLineChart(pts, opts = {}) {
+  const color = opts.color || "#f2c14e";
+  const fmt = opts.fmt || ((n) => Math.round(n).toLocaleString());
+  if (!pts || !pts.length) {
+    return `<div class="chart-empty">${opts.empty || "No data yet — log some workouts to see this chart."}</div>`;
+  }
+  // chart geometry (viewBox units; scales to container via width:100%)
+  const W = 600, H = 240, padL = 46, padR = 16, padT = 16, padB = 30;
+  const innerW = W - padL - padR, innerH = H - padT - padB;
+  const vals = pts.map((p) => p.value);
+  let min = Math.min(...vals), max = Math.max(...vals);
+  if (min === max) { min -= 1; max += 1; }           // flat line → give it room
+  const span = max - min || 1;
+  const n = pts.length;
+  const xAt = (i) => padL + (n === 1 ? innerW / 2 : (i / (n - 1)) * innerW);
+  const yAt = (v) => padT + innerH - ((v - min) / span) * innerH;
+
+  // horizontal gridlines + y labels (4 rows)
+  let grid = "", ylabels = "";
+  for (let g = 0; g <= 3; g++) {
+    const v = min + (span * g) / 3;
+    const y = yAt(v);
+    grid += `<line x1="${padL}" y1="${y.toFixed(1)}" x2="${W - padR}" y2="${y.toFixed(1)}" class="ch-grid"/>`;
+    ylabels += `<text x="${padL - 6}" y="${(y + 4).toFixed(1)}" class="ch-ylab">${fmt(v)}</text>`;
+  }
+  const linePts = pts.map((p, i) => `${xAt(i).toFixed(1)},${yAt(p.value).toFixed(1)}`).join(" ");
+  // area path under the line
+  const areaPath = `M ${xAt(0).toFixed(1)},${(padT + innerH).toFixed(1)} ` +
+    pts.map((p, i) => `L ${xAt(i).toFixed(1)},${yAt(p.value).toFixed(1)}`).join(" ") +
+    ` L ${xAt(n - 1).toFixed(1)},${(padT + innerH).toFixed(1)} Z`;
+  // markers (cap count so dense series stay clean)
+  const showDots = n <= 24;
+  const dots = showDots ? pts.map((p, i) =>
+    `<circle cx="${xAt(i).toFixed(1)}" cy="${yAt(p.value).toFixed(1)}" r="${n === 1 ? 5 : 3}" class="ch-dot"/>`).join("") : "";
+  // x labels: first + last (+ middle when room)
+  const xlabAt = (i) => `<text x="${xAt(i).toFixed(1)}" y="${H - 8}" class="ch-xlab" text-anchor="${i === 0 ? "start" : i === n - 1 ? "end" : "middle"}">${pts[i].label}</text>`;
+  let xlabels = xlabAt(0);
+  if (n > 1) xlabels += xlabAt(n - 1);
+  if (n > 4) xlabels += xlabAt(Math.floor((n - 1) / 2));
+
+  const grad = "g" + Math.random().toString(36).slice(2, 8);
+  return `<svg class="chart-svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" role="img" style="--ch:${color}">
+    <defs><linearGradient id="${grad}" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="${color}" stop-opacity="0.32"/>
+      <stop offset="1" stop-color="${color}" stop-opacity="0"/>
+    </linearGradient></defs>
+    ${grid}
+    ${opts.area === false ? "" : `<path d="${areaPath}" fill="url(#${grad})"/>`}
+    ${n > 1 ? `<polyline points="${linePts}" class="ch-line"/>` : ""}
+    ${dots}
+    ${ylabels}
+    ${xlabels}
+  </svg>` +
+  `<div class="chart-foot"><span>${pts[0].label}</span>` +
+   `<span class="chart-range">${fmt(min)}–${fmt(max)}${opts.unit ? " " + opts.unit : ""}</span>` +
+   `<span>${pts[n - 1].label}</span></div>`;
+}
+
+// short axis date label from a YYYY-MM-DD string (e.g. "Jun 19")
+function shortDate(str) {
+  const [y, m, d] = str.split("-").map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+// 1) Overall MMR over time — REPLAY all sets in chronological order, maintaining a
+// running best per-exercise MMR (mirrors the live `bests` logic), and sample the
+// overall MMR (= average of those running bests) at each DISTINCT workout date.
+// This faithfully reconstructs how overallMMR() would have read after each day's
+// lifting, so the curve matches today's value at the end. Sets without a numeric
+// mmr (logged before bodyweight was set) are skipped — same as overallMMR().
+function overallMMRSeries() {
+  const chron = sets.filter((s) => typeof s.mmr === "number")
+    .slice().sort((a, b) => (a.ts || 0) - (b.ts || 0) || (a.date < b.date ? -1 : 1));
+  const runningBest = {};                 // exId -> best mmr so far
+  const byDate = {};                      // date -> overall MMR snapshot after that day
+  chron.forEach((s) => {
+    if (!(s.exId in runningBest) || s.mmr > runningBest[s.exId]) runningBest[s.exId] = s.mmr;
+    const vals = Object.values(runningBest);
+    if (vals.length) byDate[s.date] = Math.round(vals.reduce((a, b) => a + b, 0) / vals.length);
+  });
+  return Object.keys(byDate).sort()
+    .map((d) => ({ label: shortDate(d), value: byDate[d] }));
+}
+
+// 2) Per-lift MMR over time for one exercise — its sets' MMR by date (best per day,
+// so multiple sets in a session read as that session's peak).
+function liftMMRSeries(exId) {
+  const rows = sets.filter((s) => s.exId === exId && typeof s.mmr === "number");
+  const byDate = {};
+  rows.forEach((s) => { byDate[s.date] = Math.max(byDate[s.date] ?? -1, s.mmr); });
+  return Object.keys(byDate).sort().map((d) => ({ label: shortDate(d), value: byDate[d] }));
+}
+
+// 3) Bodyweight trend from the dated bwLog.
+function bodyweightSeries() {
+  return bwLog.slice().sort((a, b) => (a.date < b.date ? -1 : 1))
+    .map((e) => ({ label: shortDate(e.date), value: e.bw }));
+}
+
+// 4) Per-session volume (Σ load×reps) reconstructed from sets grouped by date.
+function volumeSeries() {
+  const bw = profile.bodyweight || 0;
+  const byDate = {};
+  sets.forEach((s) => {
+    const ex = exById(s.exId);
+    // re-derive load×reps. Stored sets keep `detail` + oneRM, not raw load, so back
+    // it out: weighted lifts parse the leading number; bodyweight lifts use bw*factor
+    // (+ any added in the detail). Reps come from the trailing "× N".
+    const repsM = /×\s*(\d+)/.exec(s.detail || "");
+    const reps = repsM ? parseInt(repsM[1], 10) : 0;
+    let load = 0;
+    if (ex && ex.type === "bodyweight") {
+      const addM = /\+\s*(\d+)/.exec(s.detail || "");
+      load = bw * ex.factor + (addM ? parseInt(addM[1], 10) : 0);
+    } else {
+      const wM = /(\d+)/.exec(s.detail || "");
+      load = wM ? parseInt(wM[1], 10) : 0;
+    }
+    byDate[s.date] = (byDate[s.date] || 0) + load * reps;
+  });
+  return Object.keys(byDate).sort()
+    .map((d) => ({ label: shortDate(d), value: Math.round(byDate[d]) }))
+    .filter((p) => p.value > 0);
+}
+
+function renderProgress() {
+  // overall MMR
+  const ob = overallBeast();
+  const oColor = ob ? ob.color : "#f2c14e";
+  const oSeries = overallMMRSeries();
+  document.getElementById("progOverall").innerHTML = svgLineChart(oSeries, {
+    color: oColor, unit: "MMR",
+    empty: profile.bodyweight ? "Log a few workouts to chart your overall MMR." : "Set your bodyweight in Log to start tracking MMR.",
+  });
+
+  // per-lift picker (only lifts with mmr history)
+  const sel = document.getElementById("progLiftSelect");
+  const logged = EXERCISES().filter((e) => sets.some((s) => s.exId === e.id && typeof s.mmr === "number"));
+  if (!logged.length) {
+    sel.innerHTML = `<option>No lifts yet</option>`;
+    sel.disabled = true;
+    document.getElementById("progLift").innerHTML = svgLineChart([], { empty: "Log a ranked set to chart a lift." });
+  } else {
+    sel.disabled = false;
+    // keep prior selection if still valid, else pick the most-logged lift
+    const prev = sel.value;
+    const valid = logged.some((e) => e.id === prev);
+    sel.innerHTML = logged.map((e) => `<option value="${e.id}">${e.name}</option>`).join("");
+    sel.value = valid ? prev : logged[0].id;
+    drawLiftChart(sel.value);
+  }
+
+  // bodyweight
+  const bwS = bodyweightSeries();
+  document.getElementById("progBw").innerHTML = svgLineChart(bwS, {
+    color: "#36c47b", unit: "lb",
+    empty: "Set your bodyweight in Log to start a trend.",
+  }) + (bwS.length === 1 ? `<p class="chart-note">Log your weight over time to see a trend.</p>` : "");
+
+  // volume
+  document.getElementById("progVolume").innerHTML = svgLineChart(volumeSeries(), {
+    color: "#7c83ff", unit: "lb",
+    empty: "Finish a workout to chart session volume.",
+  });
+}
+function drawLiftChart(exId) {
+  const ex = exById(exId);
+  const rec = ex ? bests[ex.id] : null;
+  const b = rec ? classify(rec.mmr) : null;
+  document.getElementById("progLift").innerHTML = svgLineChart(liftMMRSeries(exId), {
+    color: b ? b.color : "#f2c14e", unit: "MMR",
+    empty: "No ranked sets for this lift yet.",
+  });
+}
+document.getElementById("progLiftSelect").addEventListener("change", (e) => drawLiftChart(e.target.value));
+
+// ===== shareable rank card (canvas → Web Share file / PNG download) =====
+const cardModal = document.getElementById("cardModal");
+const rankCanvas = document.getElementById("rankCanvas");
+
+// Draw the whole card on the 1080×1350 canvas: dark gradient bg, logo wordmark,
+// the user's overall beast (emoji + name + color), big MMR, top lifts, streak.
+// Everything is drawn in code — no external image assets required.
+function drawRankCard() {
+  const cv = rankCanvas, ctx = cv.getContext("2d");
+  const W = cv.width, H = cv.height;
+  const b = overallBeast();
+  const accent = b ? b.color : "#f2c14e";
+  const mmr = overallMMR();
+  const streak = computeStreak();
+  const liftCount = Object.keys(bests).length;
+
+  // background
+  const bg = ctx.createLinearGradient(0, 0, 0, H);
+  bg.addColorStop(0, "#0e2a1f"); bg.addColorStop(1, "#06140d");
+  ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
+  // accent glow at top
+  const glow = ctx.createRadialGradient(W / 2, 120, 40, W / 2, 120, 720);
+  glow.addColorStop(0, hexA(accent, 0.30)); glow.addColorStop(1, hexA(accent, 0));
+  ctx.fillStyle = glow; ctx.fillRect(0, 0, W, H);
+  // border frame
+  ctx.strokeStyle = hexA(accent, 0.55); ctx.lineWidth = 6;
+  roundRect(ctx, 24, 24, W - 48, H - 48, 40); ctx.stroke();
+
+  ctx.textAlign = "center";
+
+  // wordmark
+  ctx.fillStyle = "#f2c14e";
+  ctx.font = "700 64px Rajdhani, sans-serif";
+  ctx.fillText("REPTILIFT", W / 2, 150);
+  ctx.fillStyle = hexA("#eaf5ee", 0.6);
+  ctx.font = "600 30px Rajdhani, sans-serif";
+  ctx.fillText("CLIMB THE FOOD CHAIN", W / 2, 198);
+
+  // beast emoji (big)
+  ctx.font = "300px sans-serif";
+  ctx.shadowColor = accent; ctx.shadowBlur = 60;
+  ctx.fillText(b ? b.emoji : "🥚", W / 2, 560);
+  ctx.shadowBlur = 0;
+
+  // beast name
+  ctx.fillStyle = accent;
+  ctx.font = "700 84px Rajdhani, sans-serif";
+  ctx.fillText(b ? b.name : "Unranked", W / 2, 680);
+  ctx.fillStyle = hexA("#eaf5ee", 0.55);
+  ctx.font = "600 34px Rajdhani, sans-serif";
+  ctx.fillText(b ? `MMR BAND ${beastRange(b)}` : "Log a workout to rank up", W / 2, 728);
+
+  // big MMR number
+  ctx.fillStyle = "#f2c14e";
+  ctx.font = "700 200px Rajdhani, sans-serif";
+  ctx.shadowColor = hexA("#f2c14e", 0.5); ctx.shadowBlur = 40;
+  ctx.fillText(mmr != null ? String(mmr) : "—", W / 2, 920);
+  ctx.shadowBlur = 0;
+  ctx.fillStyle = hexA("#eaf5ee", 0.6);
+  ctx.font = "600 36px Rajdhani, sans-serif";
+  ctx.fillText("OVERALL MMR · 0–800", W / 2, 968);
+
+  // stat chips: streak + ranked lifts
+  drawChip(ctx, W / 2 - 250, 1020, 240, 100, `${streak}`, "DAY STREAK", accent);
+  drawChip(ctx, W / 2 + 10, 1020, 240, 100, `${liftCount}`, "RANKED LIFTS", accent);
+
+  // top lifts
+  const ranked = EXERCISES().filter((e) => bests[e.id])
+    .sort((a, b2) => bests[b2.id].oneRM - bests[a.id].oneRM).slice(0, 3);
+  ctx.textAlign = "left";
+  let ly = 1190;
+  if (ranked.length) {
+    ranked.forEach((e) => {
+      const rec = bests[e.id];
+      const fb = classify(rec.mmr) || byId(rec.beast) || BEASTS[0];
+      ctx.font = "600 40px Rajdhani, sans-serif";
+      ctx.fillStyle = "#eaf5ee";
+      ctx.textAlign = "left";
+      ctx.fillText(`${fb.emoji}  ${e.name}`, 90, ly);
+      ctx.textAlign = "right";
+      ctx.fillStyle = accent;
+      ctx.fillText(`~${rec.oneRM} lb`, W - 90, ly);
+      ly += 56;
+    });
+  } else {
+    ctx.textAlign = "center";
+    ctx.fillStyle = hexA("#eaf5ee", 0.5);
+    ctx.font = "600 36px Rajdhani, sans-serif";
+    ctx.fillText("No lifts logged yet", W / 2, 1200);
+  }
+  ctx.textAlign = "left";
+}
+// rounded-rect helper
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+// stat chip with big number + label
+function drawChip(ctx, x, y, w, h, big, label, accent) {
+  ctx.fillStyle = hexA(accent, 0.10);
+  ctx.strokeStyle = hexA(accent, 0.4); ctx.lineWidth = 2;
+  roundRect(ctx, x, y, w, h, 18); ctx.fill(); ctx.stroke();
+  ctx.textAlign = "center";
+  ctx.fillStyle = "#eaf5ee";
+  ctx.font = "700 52px Rajdhani, sans-serif";
+  ctx.fillText(big, x + w / 2, y + 56);
+  ctx.fillStyle = hexA("#eaf5ee", 0.6);
+  ctx.font = "600 22px Rajdhani, sans-serif";
+  ctx.fillText(label, x + w / 2, y + 86);
+}
+// "#rrggbb" + alpha → rgba() string (canvas has no color-mix).
+function hexA(hex, a) {
+  const h = hex.replace("#", "");
+  const n = h.length === 3 ? h.split("").map((c) => c + c).join("") : h;
+  const r = parseInt(n.slice(0, 2), 16), g = parseInt(n.slice(2, 4), 16), bl = parseInt(n.slice(4, 6), 16);
+  return `rgba(${r},${g},${bl},${a})`;
+}
+
+// open the rank-card modal: draw, then show. Fonts may load a beat late on first
+// paint, so redraw shortly after to pick up Rajdhani if it wasn't ready.
+function openRankCard() {
+  drawRankCard();
+  cardModal.classList.remove("hidden");
+  setTimeout(drawRankCard, 120);
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(drawRankCard).catch(() => {});
+}
+function closeRankCard() { cardModal.classList.add("hidden"); }
+
+// Share the canvas: prefer the Web Share API with a PNG file (native sheet on
+// mobile); otherwise download the PNG. Both paths are feature-detected and guarded
+// so nothing throws on unsupported browsers.
+async function shareRankCard() {
+  const hint = document.getElementById("cardHint");
+  const filename = "reptilift-rank.png";
+  // try Web Share with a file first
+  try {
+    const blob = await new Promise((res) => rankCanvas.toBlob(res, "image/png"));
+    if (blob && navigator.canShare) {
+      const file = new File([blob], filename, { type: "image/png" });
+      if (navigator.canShare({ files: [file] })) {
+        await navigator.share({ files: [file], title: "Reptilift", text: "My Reptilift rank 🦎" });
+        return;
+      }
+    }
+    // fallback: download the PNG
+    if (blob) {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = filename;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      if (hint) hint.textContent = "Saved the image — share it anywhere 🦎";
+      return;
+    }
+    throw new Error("no blob");
+  } catch (e) {
+    // last-ditch: data-URL download (and don't surface AbortError from a cancelled share)
+    if (e && e.name === "AbortError") return;
+    try {
+      const a = document.createElement("a");
+      a.href = rankCanvas.toDataURL("image/png"); a.download = filename;
+      document.body.appendChild(a); a.click(); a.remove();
+      if (hint) hint.textContent = "Saved the image — share it anywhere 🦎";
+    } catch (e2) {
+      if (hint) hint.textContent = "Couldn't share on this device — screenshot it instead 📸";
+    }
+  }
+}
+document.getElementById("progShareBtn").addEventListener("click", openRankCard);
+document.getElementById("ranksShareBtn").addEventListener("click", openRankCard);
+document.getElementById("cardShareBtn").addEventListener("click", shareRankCard);
+document.getElementById("cardClose").addEventListener("click", closeRankCard);
+cardModal.addEventListener("click", (e) => { if (e.target === cardModal) closeRankCard(); });
 
 // ===== startup animation =====
 const appEl = document.getElementById("app");
