@@ -428,7 +428,7 @@
     </section>
 
     <footer class="footer">
-      Reptilift v9.9 — rough cut
+      Reptilift v9.10 — rough cut
       <button id="replayIntro" class="replay">↻ replay intro</button>
     </footer>
 
@@ -492,6 +492,72 @@
 
   <!-- RANK-UP CELEBRATION -->
   <div id="rankup" class="rankup hidden"></div>
+
+  <!-- FIRST-RUN ONBOARDING WIZARD (shown once for brand-new users after the intro) -->
+  <div id="onboard" class="onboard hidden" aria-hidden="true">
+    <div class="ob-card">
+      <button class="ob-skip" id="obSkip" type="button">Skip</button>
+
+      <!-- step a: WELCOME -->
+      <div class="ob-step active" data-step="welcome">
+        <div class="ob-emoji">🦎</div>
+        <h2 class="ob-title">Welcome to Reptilift</h2>
+        <p class="ob-sub">Lift heavy for your size and climb the food chain — from <b>Chud Chicken</b> all the way to <b>Optimal Octopus</b>.</p>
+      </div>
+
+      <!-- step b: NAME -->
+      <div class="ob-step" data-step="name">
+        <div class="ob-emoji">🪪</div>
+        <h2 class="ob-title">What do we call you?</h2>
+        <p class="ob-sub">Your display name shows on your profile and rank card.</p>
+        <label class="ob-label">Display name
+          <input type="text" id="obName" maxlength="24" placeholder="e.g. Beast Mode" autocomplete="off" />
+        </label>
+        <label class="ob-label">@username <span class="ob-opt">(optional — set it later in Friends)</span>
+          <div class="ob-atwrap">
+            <span class="ob-at">@</span>
+            <input type="text" id="obUser" maxlength="20" placeholder="beastmode" autocomplete="off" />
+          </div>
+          <span class="ob-err" id="obUserErr"></span>
+        </label>
+      </div>
+
+      <!-- step c: BODYWEIGHT -->
+      <div class="ob-step" data-step="bw">
+        <div class="ob-emoji">⚖️</div>
+        <h2 class="ob-title">Your bodyweight</h2>
+        <p class="ob-sub">MMR is strength relative to <b>your</b> bodyweight, so we need this to rank your lifts.</p>
+        <label class="ob-label">Bodyweight (lbs)
+          <input type="number" id="obBw" min="0" inputmode="numeric" placeholder="e.g. 180" />
+        </label>
+        <span class="ob-err" id="obBwErr"></span>
+      </div>
+
+      <!-- step d: SAVE PROGRESS (cloud) — skipped automatically if cloud isn't configured -->
+      <div class="ob-step" data-step="cloud">
+        <div class="ob-emoji">☁️</div>
+        <h2 class="ob-title">Save your progress?</h2>
+        <p class="ob-sub">Create a free account to back up your gains, sync across devices, and unlock friends &amp; the leaderboard.</p>
+        <button class="btn" id="obSignup" type="button">Create an account</button>
+        <button class="btn ghost" id="obMaybeLater" type="button">Maybe later</button>
+      </div>
+
+      <!-- step e: FINISH -->
+      <div class="ob-step" data-step="finish">
+        <div class="ob-emoji">💪</div>
+        <h2 class="ob-title">You're set!</h2>
+        <p class="ob-sub">Start a workout, add your lifts, and log a set to earn your first beast rank.</p>
+        <button class="btn ob-cta" id="obFinish" type="button">🏋️ Log my first workout</button>
+      </div>
+
+      <!-- progress dots + nav -->
+      <div class="ob-dots" id="obDots"></div>
+      <div class="ob-nav">
+        <button class="btn ghost ob-back" id="obBack" type="button">← Back</button>
+        <button class="btn ob-next" id="obNext" type="button">Next →</button>
+      </div>
+    </div>
+  </div>
 
   <!-- EXERCISE PICKER -->
   <div id="exPicker" class="picker hidden">

@@ -1,4 +1,13 @@
-// Reptilift v3.15 — earn your beast rank per exercise from your MMR.
+// Reptilift v3.16 — earn your beast rank per exercise from your MMR.
+// v3.16 adds a first-run ONBOARDING wizard (#onboard). Shown ONCE to brand-new
+// users after the intro finishes — detected as NOT profile.onboarded AND no real
+// data (no bodyweight, no sets, no workouts). Existing users are implicitly flagged
+// (profile.onboarded=true) so it never appears for them. The flag lives inside the
+// synced reptilift_profile, so a cloud save with onboarded=true suppresses it on new
+// devices. Five skippable steps (welcome → name → bodyweight → optional cloud sign-up
+// → finish) with progress dots; bodyweight is required to advance (uses applyBodyweight);
+// the cloud step auto-drops when Supabase isn't configured. Finishing/Skip removes the
+// overlay and lands on Log/Menu. Triggered only from inside introTimers/init (load-safe).
 // v3.13 adds FRIENDS + LEADERBOARD (requires login). Two new Supabase tables:
 // public_profiles (one publicly-readable row per user: username, name, small avatar,
 // overall_mmr, beast_id, streak — powers leaderboards) and friendships (request
@@ -262,6 +271,10 @@ if (typeof profile.bio !== "string") profile.bio = "";
 if (typeof profile.avatar !== "string") profile.avatar = "";
 if (typeof profile.favoriteExercise !== "string") profile.favoriteExercise = "";  // exId of chosen favorite lift
 if (typeof profile.username !== "string") profile.username = "";   // public @handle (Friends/Leaderboard); synced inside reptilift_profile
+// first-run onboarding flag — lives INSIDE the synced profile so it travels with a
+// cloud save (logging in on a new device that has onboarded=true won't re-show the
+// wizard). Plain-guard only here (load-order safe; the check runs from init below).
+if (typeof profile.onboarded !== "boolean") profile.onboarded = false;
 // normalize the handle defensively at load with PLAIN guards only (no helper calls —
 // keeps load-order safe): lowercase, strip to [a-z0-9_], cap at 20.
 profile.username = profile.username.toLowerCase().replace(/[^a-z0-9_]/g, "").slice(0, 20);
@@ -2745,6 +2758,163 @@ document.getElementById("cardShareBtn").addEventListener("click", shareRankCard)
 document.getElementById("cardClose").addEventListener("click", closeRankCard);
 cardModal.addEventListener("click", (e) => { if (e.target === cardModal) closeRankCard(); });
 
+// ===== first-run onboarding wizard =====
+// A short, skippable, on-brand wizard shown ONCE to brand-new users. The
+// onboarded flag lives in profile.onboarded (synced inside reptilift_profile), so a
+// cloud save with onboarded=true suppresses it on other devices. Everything here is
+// defined as functions only — nothing runs at load time. maybeShowOnboarding() is
+// called from the init block AFTER the intro is wired up, so it's load-order safe.
+//
+// New-user detection: NOT onboarded AND essentially no data (no bodyweight, no logged
+// sets, no finished workouts). Existing users are implicitly flagged onboarded so the
+// wizard never appears for them.
+const OB_STEPS = ["welcome", "name", "bw", "cloud", "finish"];
+let obIndex = 0;
+let obActiveSteps = OB_STEPS.slice();   // "cloud" is dropped when Supabase isn't configured
+
+function userHasData() {
+  return !!(
+    (profile && profile.bodyweight) ||
+    (Array.isArray(sets) && sets.length) ||
+    (Array.isArray(workouts) && workouts.length)
+  );
+}
+
+function markOnboarded() {
+  profile.onboarded = true;
+  save();                          // persists profile (auto-syncs via SYNC_KEYS)
+}
+
+function closeOnboarding() {
+  const ov = document.getElementById("onboard");
+  if (!ov) return;
+  ov.classList.add("hidden");
+  ov.setAttribute("aria-hidden", "true");
+}
+
+// build the progress dots + show only the current step
+function obRender() {
+  const dotsEl = document.getElementById("obDots");
+  if (dotsEl) {
+    dotsEl.innerHTML = obActiveSteps
+      .map((_, i) => `<span class="ob-dot${i === obIndex ? " on" : ""}"></span>`)
+      .join("");
+  }
+  const cur = obActiveSteps[obIndex];
+  document.querySelectorAll("#onboard .ob-step").forEach((el) => {
+    el.classList.toggle("active", el.dataset.step === cur);
+  });
+  const back = document.getElementById("obBack");
+  const next = document.getElementById("obNext");
+  if (back) back.classList.toggle("hidden", obIndex === 0);
+  // the cloud + finish steps carry their own action buttons, so hide the generic Next there
+  if (next) next.classList.toggle("hidden", cur === "cloud" || cur === "finish");
+}
+
+function obGoTo(i) {
+  obIndex = Math.max(0, Math.min(obActiveSteps.length - 1, i));
+  obRender();
+}
+
+// validate + persist the current step before advancing. Returns false to block.
+function obCommitStep() {
+  const cur = obActiveSteps[obIndex];
+  if (cur === "name") {
+    const nameEl = document.getElementById("obName");
+    const userEl = document.getElementById("obUser");
+    const errEl = document.getElementById("obUserErr");
+    if (errEl) errEl.textContent = "";
+    if (nameEl) profile.name = (nameEl.value || "").trim().slice(0, 24);
+    if (userEl) {
+      const raw = (userEl.value || "").trim().toLowerCase().replace(/[^a-z0-9_]/g, "");
+      if (raw) {
+        if (!USERNAME_RE.test(raw)) {
+          if (errEl) errEl.textContent = "3–20 chars: lowercase letters, numbers, underscores.";
+          return false;   // only block when they typed something invalid; blank is fine
+        }
+        profile.username = raw;
+      }
+    }
+    save();
+    try { renderHome(); } catch (e) {}
+    return true;
+  }
+  if (cur === "bw") {
+    const bwEl = document.getElementById("obBw");
+    const errEl = document.getElementById("obBwErr");
+    if (errEl) errEl.textContent = "";
+    const v = parseInt(bwEl ? bwEl.value : "", 10);
+    if (!v || v <= 0) {
+      if (errEl) errEl.textContent = "Enter your bodyweight to continue.";
+      return false;
+    }
+    applyBodyweight(v);   // stores it, seeds the trend log, recomputes MMR
+    return true;
+  }
+  return true;
+}
+
+function maybeShowOnboarding() {
+  const ov = document.getElementById("onboard");
+  if (!ov) return;
+  // Existing users (any real data) → flag them so it never shows, and bail.
+  if (userHasData() && !profile.onboarded) { markOnboarded(); return; }
+  if (profile.onboarded || userHasData()) return;
+
+  // drop the cloud step gracefully when Supabase isn't configured
+  obActiveSteps = OB_STEPS.filter((s) => s !== "cloud" || (typeof CLOUD_CONFIGURED !== "undefined" && CLOUD_CONFIGURED));
+  obIndex = 0;
+
+  // prefill from anything already in the profile
+  const nameEl = document.getElementById("obName");
+  const userEl = document.getElementById("obUser");
+  const bwEl   = document.getElementById("obBw");
+  if (nameEl) nameEl.value = profile.name || "";
+  if (userEl) userEl.value = profile.username || "";
+  if (bwEl)   bwEl.value = profile.bodyweight || "";
+
+  ov.classList.remove("hidden");
+  ov.setAttribute("aria-hidden", "false");
+  obRender();
+}
+
+(function wireOnboarding() {
+  const ov = document.getElementById("onboard");
+  if (!ov) return;
+  const skip = () => { markOnboarded(); closeOnboarding(); };
+
+  const skipBtn = document.getElementById("obSkip");
+  if (skipBtn) skipBtn.addEventListener("click", skip);
+
+  const nextBtn = document.getElementById("obNext");
+  if (nextBtn) nextBtn.addEventListener("click", () => { if (obCommitStep()) obGoTo(obIndex + 1); });
+
+  const backBtn = document.getElementById("obBack");
+  if (backBtn) backBtn.addEventListener("click", () => obGoTo(obIndex - 1));
+
+  // cloud step: jump to the Account page sign-up (marks onboarded so we don't re-show)
+  const signupBtn = document.getElementById("obSignup");
+  if (signupBtn) signupBtn.addEventListener("click", () => {
+    markOnboarded();
+    closeOnboarding();
+    try {
+      cloudMode = "signup";
+      if (typeof paintMode === "function") paintMode();
+      switchTab("account-page");
+    } catch (e) { try { switchTab("home"); } catch (e2) {} }
+  });
+  const laterBtn = document.getElementById("obMaybeLater");
+  if (laterBtn) laterBtn.addEventListener("click", () => obGoTo(obIndex + 1));
+
+  // finish: mark done and drop them into the Log tab to start their first workout
+  const finishBtn = document.getElementById("obFinish");
+  if (finishBtn) finishBtn.addEventListener("click", () => {
+    markOnboarded();
+    closeOnboarding();
+    try { switchTab("log"); } catch (e) {}
+  });
+})();
+
 // ===== startup animation =====
 const appEl = document.getElementById("app");
 function introTimers(introEl, firstLoad) {
@@ -2754,7 +2924,12 @@ function introTimers(introEl, firstLoad) {
   window.setTimeout(() => introEl.classList.add("look"), 3400);         // eyes blink & dart around
   if (firstLoad && appEl) window.setTimeout(() => appEl.classList.add("ready"), 5200);
   window.setTimeout(() => introEl.classList.add("hide"), 5200);
-  window.setTimeout(() => { introEl.style.display = "none"; }, 6100);
+  window.setTimeout(() => {
+    introEl.style.display = "none";
+    // first load only: once the intro is out of the way, offer the onboarding wizard
+    // to brand-new users (no-op otherwise). Guarded so it never blocks the app.
+    if (firstLoad) { try { maybeShowOnboarding(); } catch (e) {} }
+  }, 6100);
 }
 (function () {
   const intro = document.getElementById("intro");
