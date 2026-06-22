@@ -1,4 +1,4 @@
-// Reptilift v3.29 — earn your beast rank per exercise from your MMR.
+// Reptilift v3.30 — earn your beast rank per exercise from your MMR.
 // v3.28 makes ACHIEVEMENTS tiered: each badge levels up through escalating thresholds
 // with fun names (e.g. lifetime volume One Ton → Rhino → … → Blue Whale → Space Shuttle).
 // reptilift_achievements stores { levels: {id: highestLevelReached}, dates: {id: date} };
@@ -426,6 +426,8 @@ const addCoins = (n) => {
 };
 function refreshWallet() {                     // update every on-screen balance chip
   document.querySelectorAll("[data-wallet]").forEach((el) => { el.textContent = wallet.balance.toLocaleString(); });
+  const sEl = document.getElementById("topStreak");   // top-bar 🔥 streak chip
+  if (sEl) { try { sEl.textContent = computeStreak(); } catch (e) {} }
 }
 
 const EXERCISES = () => [...BASE_EXERCISES, ...customEx];
