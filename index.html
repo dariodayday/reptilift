@@ -354,6 +354,27 @@
       </div>
     </div>
 
+    <!-- AVATAR CROPPER — zoom/pan a picked photo inside a circular viewport before staging -->
+    <div id="cropModal" class="modal hidden">
+      <div class="modal-inner">
+        <div class="crop-card">
+          <h2 class="crop-title">Position your photo</h2>
+          <p class="crop-sub">Pinch or scroll to zoom, drag to move.</p>
+          <div class="crop-stage" id="cropStage">
+            <canvas id="cropCanvas" class="crop-canvas"></canvas>
+            <div class="crop-ring" aria-hidden="true"></div>
+          </div>
+          <div class="crop-zoomrow">
+            <span class="crop-zoomico" aria-hidden="true">−</span>
+            <input id="cropZoom" class="crop-zoom" type="range" min="1" max="4" step="0.01" value="1" />
+            <span class="crop-zoomico" aria-hidden="true">+</span>
+          </div>
+          <button class="btn" id="cropUse" type="button">Use photo</button>
+          <button class="btn ghost" id="cropCancel" type="button">Cancel</button>
+        </div>
+      </div>
+    </div>
+
     <!-- PROGRESS (charts) — dedicated screen, reached from Menu / Ranks (not a tab) -->
     <section id="progress" class="panel">
       <button class="backlink" data-go="home" type="button">← Menu</button>
@@ -492,7 +513,7 @@
     </section>
 
     <footer class="footer">
-      Reptilift v9.25 — rough cut
+      Reptilift v9.26 — rough cut
       <button id="replayIntro" class="replay">↻ replay intro</button>
     </footer>
 

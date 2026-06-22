@@ -1,4 +1,4 @@
-// Reptilift v3.24 — earn your beast rank per exercise from your MMR.
+// Reptilift v3.25 — earn your beast rank per exercise from your MMR.
 // v3.16 adds a first-run ONBOARDING wizard (#onboard). Shown ONCE to brand-new
 // users after the intro finishes — detected as NOT profile.onboarded AND no real
 // data (no bodyweight, no sets, no workouts). Existing users are implicitly flagged
@@ -2346,12 +2346,13 @@ let stagedAvatar = null;
   if (pickBtn && fileInput) pickBtn.addEventListener("click", () => fileInput.click());
   if (fileInput) fileInput.addEventListener("change", (e) => {
     const f = e.target.files && e.target.files[0];
+    fileInput.value = "";   // allow re-picking the same file (read ref before clearing)
     if (!f) return;
-    downscaleImage(f, 256, 0.7).then((dataUrl) => {
+    // open the interactive cropper; on confirm it stages the cropped data URL.
+    openAvatarCropper(f, (dataUrl) => {
       stagedAvatar = dataUrl;
       if (preview) preview.innerHTML = `<img src="${dataUrl}" alt="" />`;
-    }).catch(() => { alert("Couldn't read that image. Try another. 🦎"); });
-    fileInput.value = "";   // allow re-picking the same file
+    });
   });
   if (removeBtn) removeBtn.addEventListener("click", () => {
     stagedAvatar = "";
@@ -2410,6 +2411,206 @@ function downscaleImage(file, size, quality) {
     img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("img load failed")); };
     img.src = url;
   });
+}
+
+// ===== avatar cropper =====
+// Interactive zoom/pan cropper. The user positions a picked image inside a circular
+// viewport (the circle is purely a visual mask — we still store a SQUARE crop so it
+// works in every square/circle avatar container). On confirm we render exactly the
+// visible region to a 256×256 canvas and hand the JPEG data URL back via onConfirm.
+//
+// Geometry (all in stage CSS-pixel space, but the canvas is internally sized to
+// VIEW×VIEW with a devicePixelRatio scale so it stays crisp):
+//   scale  = how much the source image is enlarged. minScale = "cover" the viewport.
+//   tx,ty  = translation of the image's CENTER from the viewport CENTER.
+// drawImage destination: top-left at (VIEW/2 + tx - dw/2, VIEW/2 + ty - dh/2), where
+// dw = img.width*scale, dh = img.height*scale. The 256 output canvas redraws the same
+// transform scaled by (256/VIEW), so the output matches what's on screen pixel-for-pixel.
+const VIEW = 256;   // logical viewport edge in px (matches .crop-stage size)
+let cropState = null;
+function openAvatarCropper(file, onConfirm) {
+  const modal = document.getElementById("cropModal");
+  const stage = document.getElementById("cropStage");
+  const canvas = document.getElementById("cropCanvas");
+  const zoom = document.getElementById("cropZoom");
+  const useBtn = document.getElementById("cropUse");
+  const cancelBtn = document.getElementById("cropCancel");
+  if (!modal || !stage || !canvas || !zoom || !useBtn || !cancelBtn) return;
+
+  const url = URL.createObjectURL(file);
+  const img = new Image();
+  let closed = false;
+
+  function cleanup() {
+    if (closed) return;
+    closed = true;
+    try { URL.revokeObjectURL(url); } catch (e) {}
+    // detach this session's listeners by replacing the handlers map
+    if (cropState && cropState.detach) { try { cropState.detach(); } catch (e) {} }
+    cropState = null;
+    modal.classList.add("hidden");
+  }
+
+  img.onerror = () => { cleanup(); };   // bad/corrupt image → close gracefully, no throw
+  img.onload = () => {
+    try {
+      if (!img.width || !img.height) { cleanup(); return; }
+      // crisp canvas at devicePixelRatio
+      const dpr = Math.min(window.devicePixelRatio || 1, 3);
+      canvas.width = VIEW * dpr; canvas.height = VIEW * dpr;
+      const ctx = canvas.getContext("2d");
+
+      // minScale = cover the viewport; start centered at min zoom.
+      const minScale = VIEW / Math.min(img.width, img.height);
+      const st = { img, ctx, dpr, minScale, scale: minScale, tx: 0, ty: 0 };
+      cropState = st;
+
+      function draw() {
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        ctx.clearRect(0, 0, VIEW, VIEW);
+        const dw = img.width * st.scale, dh = img.height * st.scale;
+        ctx.drawImage(img, VIEW / 2 + st.tx - dw / 2, VIEW / 2 + st.ty - dh / 2, dw, dh);
+      }
+      // keep the image covering the viewport: clamp pan so no gap shows.
+      function clamp() {
+        const dw = img.width * st.scale, dh = img.height * st.scale;
+        const mx = Math.max(0, (dw - VIEW) / 2), my = Math.max(0, (dh - VIEW) / 2);
+        st.tx = Math.max(-mx, Math.min(mx, st.tx));
+        st.ty = Math.max(-my, Math.min(my, st.ty));
+      }
+      st.draw = draw; st.clamp = clamp;
+
+      // zoom slider 1..4 maps to minScale..minScale*4
+      zoom.min = "1"; zoom.max = "4"; zoom.step = "0.01"; zoom.value = "1";
+      function applyZoomFactor(factor, cx, cy) {
+        factor = Math.max(1, Math.min(4, factor));
+        const newScale = minScale * factor;
+        // zoom about a focal point (cx,cy in stage px, origin = viewport center)
+        if (cx != null && st.scale > 0) {
+          const k = newScale / st.scale;
+          st.tx = cx - (cx - st.tx) * k;
+          st.ty = cy - (cy - st.ty) * k;
+        }
+        st.scale = newScale;
+        zoom.value = String(factor);
+        clamp(); draw();
+      }
+      st.applyZoomFactor = applyZoomFactor;
+
+      // ---- pointer/drag + wheel + pinch ----
+      let dragging = false, lastX = 0, lastY = 0;
+      let pinchDist = 0, pinchFactor = 1;
+      const rectOf = () => stage.getBoundingClientRect();
+      const toLocal = (clientX, clientY, r) => ({ x: clientX - r.left - r.width / 2, y: clientY - r.top - r.height / 2 });
+      const sc = () => VIEW / stage.getBoundingClientRect().width;   // stage px → logical VIEW px
+
+      function onPointerDown(e) {
+        dragging = true; lastX = e.clientX; lastY = e.clientY;
+        stage.setPointerCapture && stage.setPointerCapture(e.pointerId);
+        e.preventDefault();
+      }
+      function onPointerMove(e) {
+        if (!dragging) return;
+        const k = sc();
+        st.tx += (e.clientX - lastX) * k;
+        st.ty += (e.clientY - lastY) * k;
+        lastX = e.clientX; lastY = e.clientY;
+        clamp(); draw();
+        e.preventDefault();
+      }
+      function onPointerUp(e) { dragging = false; }
+
+      function onWheel(e) {
+        e.preventDefault();
+        const r = rectOf(), k = sc();
+        const p = toLocal(e.clientX, e.clientY, r);
+        const factor = parseFloat(zoom.value) * (e.deltaY < 0 ? 1.08 : 1 / 1.08);
+        applyZoomFactor(factor, p.x * k, p.y * k);
+      }
+
+      // touch: 1 finger pan, 2 finger pinch zoom. preventDefault to stop page scroll/zoom.
+      function dist(t1, t2) { return Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY); }
+      function onTouchStart(e) {
+        if (e.touches.length === 1) {
+          dragging = true; lastX = e.touches[0].clientX; lastY = e.touches[0].clientY;
+        } else if (e.touches.length === 2) {
+          dragging = false;
+          pinchDist = dist(e.touches[0], e.touches[1]);
+          pinchFactor = parseFloat(zoom.value);
+        }
+        e.preventDefault();
+      }
+      function onTouchMove(e) {
+        const k = sc();
+        if (e.touches.length === 1 && dragging) {
+          st.tx += (e.touches[0].clientX - lastX) * k;
+          st.ty += (e.touches[0].clientY - lastY) * k;
+          lastX = e.touches[0].clientX; lastY = e.touches[0].clientY;
+          clamp(); draw();
+        } else if (e.touches.length === 2 && pinchDist > 0) {
+          const r = rectOf();
+          const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+          const midY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+          const p = toLocal(midX, midY, r);
+          const d = dist(e.touches[0], e.touches[1]);
+          applyZoomFactor(pinchFactor * (d / pinchDist), p.x * k, p.y * k);
+        }
+        e.preventDefault();
+      }
+      function onTouchEnd(e) {
+        if (e.touches.length === 0) { dragging = false; pinchDist = 0; }
+        else if (e.touches.length === 1) {
+          dragging = true; lastX = e.touches[0].clientX; lastY = e.touches[0].clientY; pinchDist = 0;
+        }
+      }
+
+      function onZoomInput() { applyZoomFactor(parseFloat(zoom.value) || 1, 0, 0); }
+
+      stage.addEventListener("pointerdown", onPointerDown);
+      stage.addEventListener("pointermove", onPointerMove);
+      stage.addEventListener("pointerup", onPointerUp);
+      stage.addEventListener("pointercancel", onPointerUp);
+      stage.addEventListener("wheel", onWheel, { passive: false });
+      stage.addEventListener("touchstart", onTouchStart, { passive: false });
+      stage.addEventListener("touchmove", onTouchMove, { passive: false });
+      stage.addEventListener("touchend", onTouchEnd);
+      zoom.addEventListener("input", onZoomInput);
+
+      st.detach = () => {
+        stage.removeEventListener("pointerdown", onPointerDown);
+        stage.removeEventListener("pointermove", onPointerMove);
+        stage.removeEventListener("pointerup", onPointerUp);
+        stage.removeEventListener("pointercancel", onPointerUp);
+        stage.removeEventListener("wheel", onWheel);
+        stage.removeEventListener("touchstart", onTouchStart);
+        stage.removeEventListener("touchmove", onTouchMove);
+        stage.removeEventListener("touchend", onTouchEnd);
+        zoom.removeEventListener("input", onZoomInput);
+        useBtn.onclick = null; cancelBtn.onclick = null;
+      };
+
+      // confirm: redraw the same transform onto a 256 output canvas (scale-independent
+      // of dpr), masked to the circle's bounding square (== the whole viewport).
+      useBtn.onclick = () => {
+        try {
+          const out = document.createElement("canvas");
+          out.width = 256; out.height = 256;
+          const octx = out.getContext("2d");
+          const f = 256 / VIEW;
+          const dw = img.width * st.scale * f, dh = img.height * st.scale * f;
+          octx.drawImage(img, 128 + st.tx * f - dw / 2, 128 + st.ty * f - dh / 2, dw, dh);
+          const dataUrl = out.toDataURL("image/jpeg", 0.8);
+          cleanup();
+          if (typeof onConfirm === "function") onConfirm(dataUrl);
+        } catch (err) { cleanup(); }
+      };
+      cancelBtn.onclick = () => { cleanup(); };
+
+      modal.classList.remove("hidden");
+      draw();
+    } catch (e) { cleanup(); }
+  };
+  img.src = url;
 }
 
 // ===== rank-up celebration =====
