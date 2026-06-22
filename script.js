@@ -1,4 +1,4 @@
-// Reptilift v3.16 — earn your beast rank per exercise from your MMR.
+// Reptilift v3.17 — earn your beast rank per exercise from your MMR.
 // v3.16 adds a first-run ONBOARDING wizard (#onboard). Shown ONCE to brand-new
 // users after the intro finishes — detected as NOT profile.onboarded AND no real
 // data (no bodyweight, no sets, no workouts). Existing users are implicitly flagged
@@ -357,7 +357,8 @@ const CUR = "Scales";                         // currency name
 // quests.lifetime.coins (existing synced key — no new storage) for the High Roller
 // achievement. Spending (n<0) never decrements the lifetime total.
 const addCoins = (n) => {
-  wallet.balance = Math.max(0, wallet.balance + n);
+  // clamp against NaN so a corrupt cloud-applied balance can't poison the wallet.
+  wallet.balance = Math.max(0, (Number(wallet.balance) || 0) + (Number(n) || 0));
   if (n > 0) quests.lifetime.coins = (quests.lifetime.coins || 0) + n;
 };
 function refreshWallet() {                     // update every on-screen balance chip
@@ -537,7 +538,7 @@ document.querySelectorAll("[data-go]").forEach((btn) => btn.addEventListener("cl
 
 // ===== profile bodyweight =====
 const bwInput = document.getElementById("bw");
-if (profile.bodyweight) bwInput.value = profile.bodyweight;
+if (bwInput && profile.bodyweight) bwInput.value = profile.bodyweight;
 // Apply a new bodyweight value (shared by the Log bodyweight input AND the Profile
 // page's bodyweight field so the two stay in sync). Logs a dated entry for the
 // trend chart and recomputes every best's MMR/beast under the new bodyweight.
@@ -562,18 +563,20 @@ function applyBodyweight(val) {
   save();
   renderHome();
 }
-bwInput.addEventListener("change", () => applyBodyweight(bwInput.value));
+if (bwInput) bwInput.addEventListener("change", () => applyBodyweight(bwInput.value));
 
 // ===== rank-up sound + haptics =====
 // Self-contained: SFX are synthesized with the Web Audio API (no files/network).
 // soundOn gates both the cue and vibration; persisted in localStorage (default ON).
 const soundToggle = document.getElementById("soundToggle");
-soundToggle.checked = soundOn;
-soundToggle.addEventListener("change", () => {
-  soundOn = soundToggle.checked;
-  localStorage.setItem("reptilift_sound", soundOn ? "on" : "off");
-  if (soundOn) blip();   // tiny confirmation chirp when (re)enabled
-});
+if (soundToggle) {
+  soundToggle.checked = soundOn;
+  soundToggle.addEventListener("change", () => {
+    soundOn = soundToggle.checked;
+    localStorage.setItem("reptilift_sound", soundOn ? "on" : "off");
+    if (soundOn) blip();   // tiny confirmation chirp when (re)enabled
+  });
+}
 
 // Lazily create/resume one shared AudioContext on a user gesture (logging a set
 // is a gesture, but resume() anyway to dodge autoplay suspension). Returns null
@@ -1019,7 +1022,7 @@ function completeSet(i, j) {
   if (reps < 1) { alert("Enter reps first."); return; }
   let bodyweight = profile.bodyweight || 0, added = 0, weight = 0;
   if (ex.type === "bodyweight") {
-    if (!bodyweight) { alert("Set your bodyweight up top first 🦎"); bwInput.focus(); return; }
+    if (!bodyweight) { alert("Set your bodyweight up top first 🦎"); if (bwInput) bwInput.focus(); return; }
     added = parseInt(s.lbs, 10) || 0;   // for bodyweight moves the LBS column = added weight
   } else {
     weight = parseInt(s.lbs, 10) || 0;
@@ -1030,19 +1033,27 @@ function completeSet(i, j) {
   const beast = classify(mmr);                    // rank is MMR-driven (null bw -> null)
   s.done = true; s.oneRM = oneRM; s.beast = beast ? beast.id : null; s.added = added; s.mmr = mmr;
   const detail = ex.type === "bodyweight" ? `BW ${bodyweight}${added ? " + " + added : ""} × ${reps}` : `${weight} × ${reps}`;
-  sets.unshift({ date: todayStr(), ts: Date.now(), exId: ex.id, exName: ex.name, detail, oneRM, beast: s.beast, mmr });
+  // freeze this set's per-rep effective load (using bodyweight AT LOG TIME for bw moves)
+  // + numeric reps so historical volume never drifts when bodyweight changes later.
+  const load = ex.type === "bodyweight" ? (bodyweight * (ex.factor || 0) + added) : weight;
+  sets.unshift({ date: todayStr(), ts: Date.now(), exId: ex.id, exName: ex.name, detail, oneRM, beast: s.beast, mmr, load, reps });
   const prev = bests[ex.id];
   const prevMmr = prev && typeof prev.mmr === "number" ? prev.mmr : -1;
-  // best MMR drives the beast rank; track best oneRM independently for display.
-  const bestMmr = Math.max(mmr ?? 0, prev && typeof prev.mmr === "number" ? prev.mmr : 0) || mmr;
-  const bestBeast = classify(bestMmr);
   const prevBeast = prev && prev.beast ? byId(prev.beast) : null;   // null → was unranked (egg state)
-  const rankedUp = !!bestBeast && tierOf(bestBeast.id) > (prevBeast ? tierOf(prevBeast.id) : 0);
   const newMmrPr = mmr != null && mmr > prevMmr;   // beat this lift's best MMR this set
-  const bestOneRM = Math.max(oneRM, prev ? prev.oneRM : 0);
-  if (!prev || bestMmr > (typeof prev.mmr === "number" ? prev.mmr : -1) || oneRM > prev.oneRM) {
-    bests[ex.id] = { beast: bestBeast ? bestBeast.id : (prev ? prev.beast : null), oneRM: bestOneRM, date: todayStr(), mmr: bestMmr };
+  // The displayed beast/mmr/oneRM must come from ONE performance: keep the record
+  // coherent by storing the best-MMR set's own oneRM with it. (oneRMmax tracks the
+  // all-time-max oneRM separately, in case any display wants the raw peak.)
+  const updateBest = !prev || (mmr != null && mmr > prevMmr);
+  if (updateBest) {
+    const oneRMmax = Math.max(oneRM, prev ? (prev.oneRMmax || prev.oneRM || 0) : 0);
+    bests[ex.id] = { beast: beast ? beast.id : null, oneRM, date: todayStr(), mmr, oneRMmax };
+  } else if (prev) {
+    // not a new MMR PR, but still remember an all-time-max oneRM for completeness.
+    prev.oneRMmax = Math.max(prev.oneRMmax || prev.oneRM || 0, oneRM);
   }
+  const bestBeast = bests[ex.id] && bests[ex.id].beast ? byId(bests[ex.id].beast) : null;
+  const rankedUp = !!bestBeast && tierOf(bestBeast.id) > (prevBeast ? tierOf(prevBeast.id) : 0);
   // record session events for the post-workout review (rank-ups + per-lift MMR PRs)
   if (workout) {
     workout.events = workout.events || [];
@@ -2434,7 +2445,7 @@ function shortDate(str) {
 // mmr (logged before bodyweight was set) are skipped — same as overallMMR().
 function overallMMRSeries() {
   const chron = sets.filter((s) => typeof s.mmr === "number")
-    .slice().sort((a, b) => (a.ts || 0) - (b.ts || 0) || (a.date < b.date ? -1 : 1));
+    .slice().sort((a, b) => (a.ts || 0) - (b.ts || 0) || (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
   const runningBest = {};                 // exId -> best mmr so far
   const byDate = {};                      // date -> overall MMR snapshot after that day
   chron.forEach((s) => {
@@ -2457,7 +2468,7 @@ function liftMMRSeries(exId) {
 
 // 3) Bodyweight trend from the dated bwLog.
 function bodyweightSeries() {
-  return bwLog.slice().sort((a, b) => (a.date < b.date ? -1 : 1))
+  return bwLog.slice().sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0))
     .map((e) => ({ label: shortDate(e.date), value: e.bw }));
 }
 
@@ -2466,19 +2477,22 @@ function volumeSeries() {
   const bw = profile.bodyweight || 0;
   const byDate = {};
   sets.forEach((s) => {
-    const ex = exById(s.exId);
-    // re-derive load×reps. Stored sets keep `detail` + oneRM, not raw load, so back
-    // it out: weighted lifts parse the leading number; bodyweight lifts use bw*factor
-    // (+ any added in the detail). Reps come from the trailing "× N".
-    const repsM = /×\s*(\d+)/.exec(s.detail || "");
-    const reps = repsM ? parseInt(repsM[1], 10) : 0;
-    let load = 0;
-    if (ex && ex.type === "bodyweight") {
-      const addM = /\+\s*(\d+)/.exec(s.detail || "");
-      load = bw * ex.factor + (addM ? parseInt(addM[1], 10) : 0);
+    // Prefer the load+reps frozen on the set at log time (bodyweight-correct, never
+    // drifts). Fall back to re-deriving from `detail` for legacy sets that predate it.
+    let load, reps;
+    if (typeof s.load === "number" && typeof s.reps === "number") {
+      load = s.load; reps = s.reps;
     } else {
-      const wM = /(\d+)/.exec(s.detail || "");
-      load = wM ? parseInt(wM[1], 10) : 0;
+      const ex = exById(s.exId);
+      const repsM = /×\s*(\d+)/.exec(s.detail || "");
+      reps = repsM ? parseInt(repsM[1], 10) : 0;
+      if (ex && ex.type === "bodyweight") {
+        const addM = /\+\s*(\d+)/.exec(s.detail || "");
+        load = bw * ex.factor + (addM ? parseInt(addM[1], 10) : 0);
+      } else {
+        const wM = /(\d+)/.exec(s.detail || "");
+        load = wM ? parseInt(wM[1], 10) : 0;
+      }
     }
     byDate[s.date] = (byDate[s.date] || 0) + load * reps;
   });
@@ -3394,6 +3408,8 @@ function onCloudAuthChanged() {
     } else {
       publishPublicProfile();
     }
+    // on login, finalize any past-deadline duels even if the tab is never opened.
+    try { if (typeof updateMyDuels === "function") updateMyDuels(); } catch (e) {}
   }
   const fp = document.getElementById("friends-page");
   if (fp && fp.classList.contains("active")) { try { renderFriendsPage(); } catch (e) {} }
@@ -3545,6 +3561,8 @@ function renderFriendsPage() {
 
   refreshRequestBadge();   // always keep the badge count fresh
   refreshDuelBadge();      // incoming-duels count badge
+  // resolve any past-deadline duels even when the Duels sub-tab isn't open.
+  try { if (typeof updateMyDuels === "function") updateMyDuels(); } catch (e) {}
 }
 
 // ---- data helpers (all guarded, return [] on failure) ----------------------
@@ -3717,7 +3735,7 @@ async function acceptRequest(edgeId) {
     const { error } = await supa.from("friendships").update({ status: "accepted" }).eq("id", edgeId);
     if (error) throw error;
     if (soundOn) { try { blip(); } catch (e) {} }
-  } catch (e) {}
+  } catch (e) { friendMutationError(); }
   finally { frBusy = false; }
   loadRequests();
 }
@@ -3727,7 +3745,7 @@ async function deleteEdge(edgeId, kind) {
   try {
     const { error } = await supa.from("friendships").delete().eq("id", edgeId);
     if (error) throw error;
-  } catch (e) {}
+  } catch (e) { friendMutationError(); }
   finally { frBusy = false; }
   if (kind === "unfriend") { closeFriendModal(); loadFriendsList(); }
   else loadRequests();
@@ -4047,8 +4065,15 @@ async function doUpdateMyDuels() {
   updatingDuels = true;
   try {
     const mine = await fetchMyDuels();
+    const now = Date.now();
     const active = mine.filter((d) => d.status === "active");
     for (const d of active) {
+      const pastDeadline = d.deadline && new Date(d.deadline).getTime() <= now;
+      // RESOLUTION GAP: finalize past-deadline duels here too (not only when the
+      // Duels tab is opened). Guarded by .eq(status,"active") in resolveDuel.
+      if (pastDeadline) { try { await resolveDuel(d); } catch (e) {} continue; }
+      // POST-DEADLINE GAINS: only sync *_current while the duel is still live, so
+      // lifting after the deadline can't change the result.
       const mineIsChallenger = d.challenger_id === cloudUser.id;
       const cur = duelMyMmr(d.exercise_id);
       const stored = mineIsChallenger ? d.challenger_current : d.opponent_current;
@@ -4240,29 +4265,43 @@ function duelDoneCard(d) {
 async function acceptDuel(id) {
   if (duelBusy) return; duelBusy = true;
   try {
-    // snapshot MY start = my current MMR for that lift right now.
+    // FAIRNESS: snapshot BOTH baselines at the ACCEPT moment so any MMR the
+    // challenger gained during the pending window doesn't unfairly count.
+    //  - my (opponent) start/current = my current MMR for that lift right now.
+    //  - challenger start = their LATEST synced value (challenger_current), so their
+    //    baseline is also "as of accept", not "as of create".
     const mine = await fetchMyDuels();
     const d = mine.find((x) => x.id === id);
     if (d && d.opponent_id === cloudUser.id) {
       const myMmr = duelMyMmr(d.exercise_id);
+      const chBaseline = (typeof d.challenger_current === "number")
+        ? d.challenger_current : (d.challenger_start || 0);
       const { error } = await supa.from("challenges").update({
-        status: "active", opponent_start: myMmr, opponent_current: myMmr,
+        status: "active",
+        opponent_start: myMmr, opponent_current: myMmr,
+        challenger_start: chBaseline, challenger_current: chBaseline,
       }).eq("id", id);
       if (error) throw error;
       if (soundOn) { try { blip(); } catch (e) {} }
     }
-  } catch (e) {} finally { duelBusy = false; }
+  } catch (e) { duelMutationError(); } finally { duelBusy = false; }
   loadDuels();
 }
 async function declineDuel(id) {
   if (duelBusy) return; duelBusy = true;
-  try { await supa.from("challenges").update({ status: "declined" }).eq("id", id); } catch (e) {}
+  try {
+    const { error } = await supa.from("challenges").update({ status: "declined" }).eq("id", id);
+    if (error) throw error;
+  } catch (e) { duelMutationError(); }
   finally { duelBusy = false; }
   loadDuels();
 }
 async function cancelDuel(id) {
   if (duelBusy) return; duelBusy = true;
-  try { await supa.from("challenges").delete().eq("id", id); } catch (e) {}
+  try {
+    const { error } = await supa.from("challenges").delete().eq("id", id);
+    if (error) throw error;
+  } catch (e) { duelMutationError(); }
   finally { duelBusy = false; }
   loadDuels();
 }
@@ -4282,6 +4321,34 @@ async function refreshDuelBadge() {
 }
 
 // ---- duel-win toast (reuses the achievement toast styling) -----------------
+// lightweight error toast — reuses the #achToast slot so a failed friend/duel
+// mutation doesn't dead-end a button silently. Self-dismisses after a few seconds.
+function showErrorToast(msg) {
+  try {
+    let el = document.getElementById("achToast");
+    if (!el) {
+      el = document.createElement("div");
+      el.id = "achToast";
+      el.className = "achtoast";
+      document.body.appendChild(el);
+    }
+    el.innerHTML = `
+      <span class="at-ic">⚠️</span>
+      <span class="at-main">
+        <span class="at-tag">Something went wrong</span>
+        <span class="at-name">${escapeHtml(msg || "Try again in a moment.")}</span>
+      </span>`;
+    el.classList.remove("show");
+    void el.offsetWidth;
+    el.classList.add("show");
+    const close = () => { el.classList.remove("show"); el.removeEventListener("click", close); };
+    el.addEventListener("click", close);
+    setTimeout(close, 2800);
+  } catch (e) {}
+}
+function duelMutationError() { showErrorToast("Couldn't update that duel — try again."); }
+function friendMutationError() { showErrorToast("Couldn't update that request — try again."); }
+
 function queueDuelWinToast(d) {
   let el = document.getElementById("achToast");
   if (!el) {
