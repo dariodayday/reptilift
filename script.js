@@ -1,4 +1,4 @@
-// Reptilift v3.21 — earn your beast rank per exercise from your MMR.
+// Reptilift v3.22 — earn your beast rank per exercise from your MMR.
 // v3.16 adds a first-run ONBOARDING wizard (#onboard). Shown ONCE to brand-new
 // users after the intro finishes — detected as NOT profile.onboarded AND no real
 // data (no bodyweight, no sets, no workouts). Existing users are implicitly flagged
@@ -1725,12 +1725,49 @@ function buyItem(id) {
   renderShop();
 }
 
-// small visual preview for a cosmetic shop card (matches its slot).
-function cosmeticPreview(c) {
-  if (c.slot === "theme")  return `<span class="cos-prev cos-prev-theme" style="background:${c.swatch}"></span>`;
-  if (c.slot === "frame")  return `<span class="cos-prev cos-prev-frame" style="${frameStyleCss(c)}">🦎</span>`;
-  if (c.slot === "border") return `<span class="cos-prev cos-prev-border" style="border-color:${c.color};box-shadow:0 0 14px ${hexA(c.glow || c.color, 0.8)}"></span>`;
-  if (c.slot === "nameColor") return `<span class="cos-prev cos-prev-name" style="${nameColorCss(c)}">Name</span>`;
+// small visual preview for a cosmetic shop card, rendered the way the item looks on
+// the profile. Reuses the same helpers the profile uses (avatarInner, frameStyleCss,
+// nameColorCss) so the preview stays truthful. Every branch is guarded so a missing
+// avatar/helper/color degrades to a sane fallback instead of throwing.
+function cosmeticPreview(c, slot) {
+  try {
+    // items are grouped by slot in COSMETICS and don't carry their own .slot,
+    // so the slot is passed in from the render loop (fallback to a lookup).
+    slot = slot || (typeof COSMETIC_BY_ID !== "undefined" && COSMETIC_BY_ID[c.id] && COSMETIC_BY_ID[c.id].slot) || "";
+    // FRAME: the user's real avatar (or 🦎) wrapped in THIS frame's ring.
+    if (slot === "frame") {
+      const inner = (typeof avatarInner === "function") ? avatarInner() : "🦎";
+      const fr = (typeof frameStyleCss === "function") ? frameStyleCss(c) : "";
+      return `<span class="cos-prev cos-prev-frame" style="${fr}">${inner}</span>`;
+    }
+    // NAME COLOR: a sample of the user's display name in THIS color/gradient.
+    if (slot === "nameColor") {
+      const nm = (profile && profile.name) ? profile.name : "Beastmode";
+      const ncStyle = (typeof nameColorCss === "function") ? nameColorCss(c) : "";
+      return `<span class="cos-prev cos-prev-name" style="${ncStyle}">${escapeHtml(nm)}</span>`;
+    }
+    // BORDER: a mock profile-header box wearing THIS border's glow.
+    if (slot === "border") {
+      const col = c.color || "#f2c14e";
+      const glow = (typeof hexA === "function") ? hexA(c.glow || col, 0.55) : (c.glow || col);
+      const inner = (typeof avatarInner === "function") ? avatarInner() : "🦎";
+      return `<span class="cos-prev cos-prev-border" style="border-color:${col};box-shadow:0 0 0 1px ${col} inset, 0 0 18px ${glow}">
+        <span class="cos-prev-border-av">${inner}</span>
+        <span class="cos-prev-border-bars"><i></i><i></i></span></span>`;
+    }
+    // THEME: a mini rank-card swatch using THIS theme's bg gradient + accent + wordmark.
+    if (slot === "theme") {
+      const bg = (c.bg && c.bg.length === 2)
+        ? `linear-gradient(160deg,${c.bg[0]},${c.bg[1]})`
+        : (c.swatch || "linear-gradient(135deg,#3a3f44,#0c0e0d)");
+      const accent = c.accent || "#c9ced4";
+      const wm = c.wordmark || "#eaf5ee";
+      return `<span class="cos-prev cos-prev-theme" style="background:${bg};border-color:${hexA ? hexA(accent, 0.5) : accent}">
+        <span class="cos-prev-theme-wm" style="color:${wm}">REPTILIFT</span>
+        <span class="cos-prev-theme-bar" style="background:${accent};box-shadow:0 0 10px ${hexA ? hexA(accent, 0.8) : accent}"></span>
+        <span class="cos-prev-theme-dot" style="background:${accent}"></span></span>`;
+    }
+  } catch (e) {}
   return `<span class="cos-prev"></span>`;
 }
 // Cosmetics storefront: one labeled group per slot, each item shows a preview, name,
@@ -1749,7 +1786,7 @@ function renderCosmeticShop() {
         ? (equipped ? `<span class="cos-eq">✓ Equipped</span>` : `<button class="btn ghost cos-act" data-cos-equip="${c.id}">Equip</button>`)
         : `<button class="btn cos-act" data-cos-buy="${c.id}">${COIN} ${c.price}</button>`;
       return `<div class="cos-item${equipped ? " on" : ""}">
-        ${cosmeticPreview(c)}
+        ${cosmeticPreview(c, s.slot)}
         <div class="cos-info"><div class="cos-name">${c.name}</div>
           <div class="cos-tag">${owned ? "Owned" : "Locked"}</div></div>
         ${btn}</div>`;
@@ -2741,10 +2778,10 @@ function drawRankCard() {
 
   // wordmark
   ctx.fillStyle = wordmarkColor;
-  ctx.font = "700 64px Rajdhani, sans-serif";
+  ctx.font = "700 64px Sora, sans-serif";
   ctx.fillText("REPTILIFT", W / 2, 150);
   ctx.fillStyle = hexA("#eaf5ee", 0.6);
-  ctx.font = "600 30px Rajdhani, sans-serif";
+  ctx.font = "600 30px Sora, sans-serif";
   ctx.fillText("CLIMB THE FOOD CHAIN", W / 2, 198);
 
   // profile avatar (circle) + display name, if set. The avatar image is preloaded
@@ -2764,7 +2801,7 @@ function drawRankCard() {
     if (hasName) {
       ctx.textAlign = "center";
       ctx.fillStyle = "#eaf5ee";
-      ctx.font = "700 46px Rajdhani, sans-serif";
+      ctx.font = "700 46px Sora, sans-serif";
       ctx.fillText(profile.name.trim(), W / 2, (cardAvatarImg && cardAvatarImg.complete && cardAvatarImg.naturalWidth) ? 396 : 300);
     }
   }
@@ -2777,20 +2814,20 @@ function drawRankCard() {
 
   // beast name
   ctx.fillStyle = accent;
-  ctx.font = "700 84px Rajdhani, sans-serif";
+  ctx.font = "700 84px Sora, sans-serif";
   ctx.fillText(b ? b.name : "Unranked", W / 2, 680);
   ctx.fillStyle = hexA("#eaf5ee", 0.55);
-  ctx.font = "600 34px Rajdhani, sans-serif";
+  ctx.font = "600 34px Sora, sans-serif";
   ctx.fillText(b ? `MMR BAND ${beastRange(b)}` : "Log a workout to rank up", W / 2, 728);
 
   // big MMR number
   ctx.fillStyle = wordmarkColor;
-  ctx.font = "700 200px Rajdhani, sans-serif";
+  ctx.font = "700 200px Sora, sans-serif";
   ctx.shadowColor = hexA(wordmarkColor, 0.5); ctx.shadowBlur = 40;
   ctx.fillText(mmr != null ? String(mmr) : "—", W / 2, 920);
   ctx.shadowBlur = 0;
   ctx.fillStyle = hexA("#eaf5ee", 0.6);
-  ctx.font = "600 36px Rajdhani, sans-serif";
+  ctx.font = "600 36px Sora, sans-serif";
   ctx.fillText("OVERALL MMR · 0–800", W / 2, 968);
 
   // stat chips: streak + ranked lifts
@@ -2806,7 +2843,7 @@ function drawRankCard() {
     ranked.forEach((e) => {
       const rec = bests[e.id];
       const fb = classify(rec.mmr) || byId(rec.beast) || BEASTS[0];
-      ctx.font = "600 40px Rajdhani, sans-serif";
+      ctx.font = "600 40px Sora, sans-serif";
       ctx.fillStyle = "#eaf5ee";
       ctx.textAlign = "left";
       ctx.fillText(`${fb.emoji}  ${e.name}`, 90, ly);
@@ -2818,7 +2855,7 @@ function drawRankCard() {
   } else {
     ctx.textAlign = "center";
     ctx.fillStyle = hexA("#eaf5ee", 0.5);
-    ctx.font = "600 36px Rajdhani, sans-serif";
+    ctx.font = "600 36px Sora, sans-serif";
     ctx.fillText("No lifts logged yet", W / 2, 1200);
   }
   ctx.textAlign = "left";
@@ -2840,10 +2877,10 @@ function drawChip(ctx, x, y, w, h, big, label, accent) {
   roundRect(ctx, x, y, w, h, 18); ctx.fill(); ctx.stroke();
   ctx.textAlign = "center";
   ctx.fillStyle = "#eaf5ee";
-  ctx.font = "700 52px Rajdhani, sans-serif";
+  ctx.font = "700 52px Sora, sans-serif";
   ctx.fillText(big, x + w / 2, y + 56);
   ctx.fillStyle = hexA("#eaf5ee", 0.6);
-  ctx.font = "600 22px Rajdhani, sans-serif";
+  ctx.font = "600 22px Sora, sans-serif";
   ctx.fillText(label, x + w / 2, y + 86);
 }
 // "#rrggbb" + alpha → rgba() string (canvas has no color-mix).
@@ -2859,7 +2896,7 @@ function hexA(hex, a) {
 // lands even if it wasn't ready on the first synchronous draw.
 let cardAvatarImg = null;
 // open the rank-card modal: draw, then show. Fonts may load a beat late on first
-// paint, so redraw shortly after to pick up Rajdhani if it wasn't ready.
+// paint, so redraw shortly after to pick up Sora if it wasn't ready.
 function openRankCard() {
   // (re)load the avatar so the card can draw it; guarded so failures just skip it.
   if (profile.avatar) {
