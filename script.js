@@ -1,4 +1,4 @@
-// Reptilift v3.23 — earn your beast rank per exercise from your MMR.
+// Reptilift v3.24 — earn your beast rank per exercise from your MMR.
 // v3.16 adds a first-run ONBOARDING wizard (#onboard). Shown ONCE to brand-new
 // users after the intro finishes — detected as NOT profile.onboarded AND no real
 // data (no bodyweight, no sets, no workouts). Existing users are implicitly flagged
@@ -2378,6 +2378,9 @@ let stagedAvatar = null;
     // name/avatar may have changed — refresh the public leaderboard row (debounced,
     // guarded; only does anything when logged in with a username set).
     try { if (typeof publishPublicProfile === "function") publishPublicProfile(); } catch (e) {}
+    // push to the cloud immediately (not just the 1.5s debounce) so closing the app
+    // right after saving an avatar/name still reaches the cloud for other devices.
+    try { if (typeof pushCloud === "function" && cloudUser) pushCloud(); } catch (e) {}
     if (savedLbl) {
       savedLbl.classList.remove("hidden");
       setTimeout(() => savedLbl.classList.add("hidden"), 1800);
@@ -3556,6 +3559,14 @@ if (ax.chip) ax.chip.addEventListener("click", () => {
 
 // retry a pending push when the network comes back
 window.addEventListener("online", () => { if (cloudUser) scheduleCloudPush(); });
+
+// Flush any pending (debounced) cloud push when the app is backgrounded or closed,
+// so a quick exit right after a change (e.g. set avatar → close) still uploads.
+function flushCloud() {
+  if (cloudUser && pushTimer) { clearTimeout(pushTimer); pushTimer = null; try { pushCloud(); } catch (e) {} }
+}
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") flushCloud(); });
+window.addEventListener("pagehide", flushCloud);
 
 // ---- boot the cloud layer ----
 (function bootCloud() {
