@@ -1102,6 +1102,21 @@ body {
 }
 .pl-bar.active small { color: color-mix(in srgb, var(--gold) 75%, var(--muted)); }
 
+/* lb / kg units toggle on the Profile edit form — small segmented control */
+.pe-unitbtns { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-top: 6px; }
+.pe-unit {
+  padding: 10px 4px; border-radius: 12px; cursor: pointer;
+  background: var(--card2); border: 1px solid var(--line); color: var(--text);
+  font-size: 16px; font-weight: 800; font-family: var(--font-display);
+  text-transform: uppercase; letter-spacing: .6px; line-height: 1;
+}
+.pe-unit:active { transform: scale(.97); }
+.pe-unit.active {
+  border-color: var(--gold); color: var(--gold);
+  background: color-mix(in srgb, var(--gold) 14%, var(--card2));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--gold) 40%, transparent) inset;
+}
+
 .pl-result { margin-top: 4px; }
 .pl-empty, .pl-note {
   text-align: center; color: var(--muted); font-size: 14px;

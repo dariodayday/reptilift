@@ -1,4 +1,9 @@
-// Reptilift v3.26 — earn your beast rank per exercise from your MMR.
+// Reptilift v3.27 — earn your beast rank per exercise from your MMR.
+// v3.27 adds a KG / LB units toggle (Profile edit form). ALL stored data stays in
+// POUNDS (canonical: sets/bests/profile.bodyweight/lastsets/MMR standards/plate bar
+// weights) — units only affect DISPLAY + INPUT via toDisplayWeight/fromInputWeight/
+// unitLabel/fmtWeight (1 kg = 2.2046226218 lb). No migration, no MMR math change.
+// profile.units ("lb"|"kg") + profile.barWeightKg ride inside the synced profile.
 // v3.26 adds a TRAINING CALENDAR heatmap to the Progress page (#progHeatmap):
 // a GitHub-contributions-style inline-SVG grid of the last ~26 weeks (columns =
 // weeks, rows = Sun–Sat), each day colored by how many sets were logged that date
@@ -293,6 +298,14 @@ if (typeof profile.onboarded !== "boolean") profile.onboarded = false;
 // profile so it follows the user across devices. Allowed bars: 45/35/15/0; anything
 // else falls back to 45 (Olympic). Plain guard only here — load-order safe.
 if (![45, 35, 15, 0].includes(profile.barWeight)) profile.barWeight = 45;
+// display units for weights: "lb" (default) or "kg". ALL stored data stays in
+// POUNDS (canonical) — units only affects how weights are shown + how typed values
+// are interpreted. Plain guard only here (load-order safe). See the unit helpers
+// (unitLabel/toDisplayWeight/fromInputWeight/fmtWeight) defined further below.
+if (profile.units !== "kg") profile.units = "lb";
+// barWeightKg: the chosen Plate Calculator bar in KG terms (kg mode uses a separate
+// bar set). Allowed: 20/15/10/0; default 20 (Olympic). Plain guard, load-order safe.
+if (![20, 15, 10, 0].includes(profile.barWeightKg)) profile.barWeightKg = 20;
 // normalize the handle defensively at load with PLAIN guards only (no helper calls —
 // keeps load-order safe): lowercase, strip to [a-z0-9_], cap at 20.
 profile.username = profile.username.toLowerCase().replace(/[^a-z0-9_]/g, "").slice(0, 20);
@@ -409,6 +422,34 @@ function prettyDate(str) {
 function estimate1RM(ex, { bodyweight, added, weight, reps }) {
   const load = ex.type === "bodyweight" ? bodyweight * ex.factor + added : weight;
   return Math.round(load * (1 + reps / 30)); // Epley
+}
+// ===== display-unit helpers (lb canonical) =====
+// ALL stored weights are pounds. These convert only at the display/input boundary
+// so the MMR engine, stored sets/bests, and bodyweight never see kilograms. Guard
+// everything; never throw. profile.units is "lb" (default) or "kg".
+const LB_PER_KG = 2.2046226218;        // 1 kg = 2.2046226218 lb
+const kgMode = () => profile.units === "kg";
+function unitLabel() { return kgMode() ? "kg" : "lb"; }
+// lb -> number to SHOW in the current unit. kg rounds to nearest 0.5; lb keeps a
+// trailing .5 when present, else rounds to nearest 1. Returns a clean Number.
+function toDisplayWeight(lb) {
+  const n = Number(lb);
+  if (!isFinite(n)) return 0;
+  if (kgMode()) return Math.round((n / LB_PER_KG) * 2) / 2;   // nearest 0.5 kg
+  const halfish = Math.abs(n - Math.round(n)) > 0.25;          // ~.5 value (e.g. 2.5 lb plate adds)
+  return halfish ? Math.round(n * 2) / 2 : Math.round(n);
+}
+// user-ENTERED value (in current display unit) -> LB for storage/computation.
+// kg mode: kg -> lb. lb mode: identity. Non-numeric -> 0.
+function fromInputWeight(val) {
+  const n = parseFloat(val);
+  if (!isFinite(n)) return 0;
+  return kgMode() ? n * LB_PER_KG : n;
+}
+// lb -> display string, e.g. "102.5 kg" / "225 lb". toDisplayWeight already yields a
+// clean number (no trailing ".0"), so plain interpolation is fine.
+function fmtWeight(lb) {
+  return `${toDisplayWeight(lb)} ${unitLabel()}`;
 }
 // MMR (0–800) via piecewise-linear interpolation of a oneRM against an exercise's
 // anchor curve. Anchors are calibrated at 180 lb and scaled by bodyweight/180
@@ -596,20 +637,33 @@ function renderContact() {
 // page renders, so it's load-order safe.
 const PLATE_DENOMS = [45, 35, 25, 10, 5, 2.5];   // standard lb plate set, largest first
 const PLATE_BARS = [45, 35, 15, 0];
+const PLATE_DENOMS_KG = [25, 20, 15, 10, 5, 2.5, 1.25]; // standard kg plate set
+const PLATE_BARS_KG = [20, 15, 10, 0];
 // distinct colors per denomination for the little stacked-plate visual (uses the
-// gold/dark theme palette so it reads on the dark bg).
+// gold/dark theme palette so it reads on the dark bg). kg denoms reuse the same hues.
 const PLATE_COLORS = {
   45: "#e0563b", 35: "#7c83ff", 25: "#f2c14e",
   10: "#46b07a", 5: "#cf6a3a", 2.5: "#9aa6b2",
+  20: "#7c83ff", 15: "#e0563b", 1.25: "#9aa6b2",
 };
 let platesWired = false;
+// the plate set + bar list for the CURRENT display unit (the calculator computes
+// directly in the display unit — target is entered in that unit).
+const plateDenoms = () => (kgMode() ? PLATE_DENOMS_KG : PLATE_DENOMS);
+const plateBars = () => (kgMode() ? PLATE_BARS_KG : PLATE_BARS);
+// the persisted bar for the current unit (separate keys so each unit remembers its
+// own bar). Falls back to the heaviest (Olympic) bar.
+function currentBar() {
+  if (kgMode()) return PLATE_BARS_KG.includes(profile.barWeightKg) ? profile.barWeightKg : 20;
+  return PLATE_BARS.includes(profile.barWeight) ? profile.barWeight : 45;
+}
 
 // greedy largest-first decomposition of a per-side weight into available plates.
 // Returns { plates:[{w,n}], loaded:Number (sum per side), remainder:Number }.
 function platesPerSide(perSide) {
   const out = [];
   let left = Math.max(0, perSide);
-  for (const w of PLATE_DENOMS) {
+  for (const w of plateDenoms()) {
     if (left + 1e-9 < w) continue;
     const n = Math.floor((left + 1e-9) / w);
     if (n > 0) { out.push({ w, n }); left -= n * w; }
@@ -625,10 +679,28 @@ function fmtPlate(n) {
 
 function renderPlates() {
   const out = document.getElementById("plResult");
-  // reflect the persisted bar selection on the buttons every render
-  const barBtns = document.querySelectorAll("#plBarBtns .pl-bar");
-  const bar = PLATE_BARS.includes(profile.barWeight) ? profile.barWeight : 45;
-  barBtns.forEach((b) => b.classList.toggle("active", Number(b.dataset.bar) === bar));
+  const u = unitLabel();
+  // rebuild the bar buttons for the current unit (denominations differ lb vs kg),
+  // then reflect the persisted selection.
+  const barWrap = document.getElementById("plBarBtns");
+  const bar = currentBar();
+  if (barWrap) {
+    const labels = kgMode()
+      ? { 20: "Olympic", 15: "Training", 10: "Light", 0: "Just plates" }
+      : { 45: "Olympic", 35: "Women's", 15: "Training", 0: "Just plates" };
+    const want = plateBars().map((b) => `${b}|${labels[b] || ""}`).join(",");
+    if (barWrap.dataset.built !== want) {
+      barWrap.innerHTML = plateBars().map((b) =>
+        `<button class="pl-bar" data-bar="${b}" type="button">${b} <small>${labels[b] || ""}</small></button>`
+      ).join("");
+      barWrap.dataset.built = want;
+      platesWired = false;   // re-wire freshly built buttons below
+    }
+  }
+  document.querySelectorAll("#plBarBtns .pl-bar").forEach((b) => b.classList.toggle("active", Number(b.dataset.bar) === bar));
+  // keep the target field's label/placeholder in the current unit
+  const tlabel = document.getElementById("plTargetLbl");
+  if (tlabel) tlabel.firstChild && (tlabel.childNodes[0].nodeValue = `Target weight (${u}) `);
 
   if (out) {
     const targetEl = document.getElementById("plTarget");
@@ -638,7 +710,7 @@ function renderPlates() {
     if (raw === "" || !isFinite(target)) {
       out.innerHTML = `<div class="pl-empty">Enter a target weight to see your plates.</div>`;
     } else if (target < bar) {
-      out.innerHTML = `<div class="pl-note">That's less than the bar (${fmtPlate(bar)} lb). Pick a lighter bar or a heavier target.</div>`;
+      out.innerHTML = `<div class="pl-note">That's less than the bar (${fmtPlate(bar)} ${u}). Pick a lighter bar or a heavier target.</div>`;
     } else if (Math.abs(target - bar) < 1e-9) {
       out.innerHTML = `<div class="pl-note">Just the empty bar — no plates needed.</div>`;
     } else {
@@ -652,9 +724,10 @@ function renderPlates() {
         : "—";
 
       // stacked-plate visual: biggest plates inner (near the bar), smallest outer
+      const maxPlate = plateDenoms()[0];           // 45 lb or 25 kg — scales the visual
       const stack = res.plates.map((p) =>
         Array.from({ length: p.n }).map(() => {
-          const h = 34 + (p.w / 45) * 56;          // bigger plate = taller block
+          const h = 34 + (p.w / maxPlate) * 56;     // bigger plate = taller block
           const c = PLATE_COLORS[p.w] || "var(--gold)";
           return `<span class="pl-plate" style="height:${h.toFixed(0)}px;--pc:${c}"><b>${fmtPlate(p.w)}</b></span>`;
         }).join("")
@@ -662,11 +735,11 @@ function renderPlates() {
 
       const exact = short < 1e-9;
       const actualLine = exact
-        ? `<div class="pl-actual ok">Loads to exactly <b>${fmtPlate(actual)} lb</b></div>`
-        : `<div class="pl-actual">Closest loadable: <b>${fmtPlate(actual)} lb</b> <span class="pl-short">(${fmtPlate(short)} lb short)</span></div>`;
+        ? `<div class="pl-actual ok">Loads to exactly <b>${fmtPlate(actual)} ${u}</b></div>`
+        : `<div class="pl-actual">Closest loadable: <b>${fmtPlate(actual)} ${u}</b> <span class="pl-short">(${fmtPlate(short)} ${u} short)</span></div>`;
 
       out.innerHTML = `
-        <div class="pl-perside">Per side <small>(×2 + ${fmtPlate(bar)} lb bar)</small></div>
+        <div class="pl-perside">Per side <small>(×2 + ${fmtPlate(bar)} ${u} bar)</small></div>
         <div class="pl-bb">
           <span class="pl-collar"></span>
           <span class="pl-stack">${stack || '<span class="pl-nobar">no plates</span>'}</span>
@@ -679,18 +752,24 @@ function renderPlates() {
   }
 
   if (platesWired) return;
-  // bar buttons: persist the choice + re-render
+  // bar buttons: persist the choice (to the unit-appropriate key) + re-render. These
+  // are (re)bound whenever the button set is rebuilt for a unit switch.
   document.querySelectorAll("#plBarBtns .pl-bar").forEach((b) => {
     b.addEventListener("click", () => {
       const v = Number(b.dataset.bar);
-      profile.barWeight = PLATE_BARS.includes(v) ? v : 45;
+      if (kgMode()) profile.barWeightKg = PLATE_BARS_KG.includes(v) ? v : 20;
+      else profile.barWeight = PLATE_BARS.includes(v) ? v : 45;
       try { save(); } catch (e) {}
       renderPlates();
     });
   });
-  // recompute live as the target changes (input event covers typing + paste)
+  // recompute live as the target changes — bind the input listener ONCE (the target
+  // field is never rebuilt, so guard it separately from the button re-wiring).
   const targetEl = document.getElementById("plTarget");
-  if (targetEl) targetEl.addEventListener("input", () => renderPlates());
+  if (targetEl && !targetEl.dataset.wired) {
+    targetEl.addEventListener("input", () => renderPlates());
+    targetEl.dataset.wired = "1";
+  }
   platesWired = true;
 }
 
@@ -699,13 +778,16 @@ document.querySelectorAll("[data-go]").forEach((btn) => btn.addEventListener("cl
 
 // ===== profile bodyweight =====
 const bwInput = document.getElementById("bw");
-if (bwInput && profile.bodyweight) bwInput.value = profile.bodyweight;
+// (the bw input is pre-filled in the current display unit from renderHome(), which
+// runs at init — no helper calls at top-level data-load time, load-order safe)
 // Apply a new bodyweight value (shared by the Log bodyweight input AND the Profile
 // page's bodyweight field so the two stay in sync). Logs a dated entry for the
 // trend chart and recomputes every best's MMR/beast under the new bodyweight.
 function applyBodyweight(val) {
-  profile.bodyweight = parseInt(val, 10) || null;
-  if (profile.bodyweight) logBodyweight(profile.bodyweight);   // dated entry for the trend chart
+  // val is entered in the current DISPLAY unit; convert to LB (canonical) for storage.
+  const lb = fromInputWeight(val);
+  profile.bodyweight = lb > 0 ? Math.round(lb) : null;
+  if (profile.bodyweight) logBodyweight(profile.bodyweight);   // dated entry for the trend chart (LB)
   // anchor curves scale with bodyweight, so recompute every best's MMR from its
   // stored oneRM, then re-derive the (MMR-driven) beast rank for each record.
   if (profile.bodyweight) {
@@ -717,10 +799,11 @@ function applyBodyweight(val) {
       v.beast = nb ? nb.id : null;
     }
   }
-  // keep both bodyweight inputs in sync
-  if (bwInput && document.activeElement !== bwInput) bwInput.value = profile.bodyweight || "";
+  // keep both bodyweight inputs in sync (shown in the current display unit)
+  const bwDisp = profile.bodyweight ? toDisplayWeight(profile.bodyweight) : "";
+  if (bwInput && document.activeElement !== bwInput) bwInput.value = bwDisp;
   const peBw = document.getElementById("peBw");
-  if (peBw && document.activeElement !== peBw) peBw.value = profile.bodyweight || "";
+  if (peBw && document.activeElement !== peBw) peBw.value = bwDisp;
   save();
   renderHome();
 }
@@ -1112,8 +1195,10 @@ function showReview(r, silent) {
   const exHtml = `<div class="rv-section"><div class="rv-shead">Exercises trained</div>` +
     r.exercises.map((e) => {
       const bs = e.bestSet;
+      // bs.lbs / bs.added are canonical LB — show them in the current display unit.
+      const bw = parseInt(bs && (bs.lbs != null ? bs.lbs : bs.added), 10) || 0;
       const detail = bs ? (bs.beast ? `${byId(bs.beast).emoji} ` : "") +
-        (parseInt(bs.lbs, 10) || parseInt(bs.added, 10) ? `${bs.lbs || bs.added} × ${bs.reps}` : `× ${bs.reps}`) : "—";
+        (parseInt(bs.lbs, 10) || parseInt(bs.added, 10) ? `${toDisplayWeight(bw)} × ${bs.reps}` : `× ${bs.reps}`) : "—";
       const pr = e.newMmr != null ? `<span class="rv-pr">PR · MMR ${e.newMmr.toLocaleString()}</span>` : "";
       return `<div class="rv-exrow">
         <span class="rv-ex-name">${e.name}</span>
@@ -1133,7 +1218,7 @@ function showReview(r, silent) {
       <div class="rv-stat"><b>${fmtDur(r.dur)}</b><span>duration</span></div>
       <div class="rv-stat"><b>${r.setCount}</b><span>sets</span></div>
       <div class="rv-stat"><b>${r.exCount}</b><span>exercises</span></div>
-      <div class="rv-stat"><b>${r.volume.toLocaleString()}</b><span>lb volume</span></div>
+      <div class="rv-stat"><b>${toDisplayWeight(r.volume).toLocaleString()}</b><span>${unitLabel()} volume</span></div>
     </div>
     ${rankupHtml}
     ${exHtml}`;
@@ -1273,7 +1358,7 @@ function renderWorkout() {
         pct = Math.max(5, Math.min(100, Math.round(((rec.mmr - rb.mmrMin) / span) * 100)));
         // concrete how-to: the weight/reps needed on THIS lift to cross into nb.
         const tgt = nextRankTarget(ex, nb.mmrMin, profile.bodyweight);
-        if (tgt && tgt.kind === "weight") nextTxt = `Hit ~${tgt.weight} lb → ${nb.emoji} ${nb.name}`;
+        if (tgt && tgt.kind === "weight") nextTxt = `Hit ~${toDisplayWeight(tgt.weight)} ${unitLabel()} → ${nb.emoji} ${nb.name}`;
         else if (tgt && tgt.kind === "reps") nextTxt = `Do ~${tgt.reps} reps → ${nb.emoji} ${nb.name}`;
         else nextTxt = `+${nb.mmrMin - rec.mmr} MMR → ${nb.emoji} ${nb.name}`;
         label = `+${nb.mmrMin - rec.mmr} MMR to next rank`;
@@ -1295,12 +1380,15 @@ function renderWorkout() {
         </div></div>`;
     }
 
-    const prevTxt = (p) => p ? `${p.lbs || p.added || 0} × ${p.reps}` : "—";
+    // PREV + the weight input are stored in LB (canonical); show them in the display unit.
+    const dispW = (v) => (v === "" || v == null ? "" : toDisplayWeight(parseFloat(v) || 0));
+    const prevTxt = (p) => p ? `${dispW(p.lbs || p.added || 0)} × ${p.reps}` : "—";
+    const u = unitLabel();
     const rows = exo.sets.map((s, j) => `
       <div class="st-row ${s.done ? "done" : ""}">
         <span class="st-num">${j + 1}</span>
         <span class="st-prev">${prevTxt(prev[j])}</span>
-        <input class="st-in st-lbs" data-i="${i}" data-j="${j}" type="number" inputmode="numeric" value="${s.lbs}" placeholder="${exo.type === "bodyweight" ? "+lbs" : "lbs"}" />
+        <input class="st-in st-lbs" data-i="${i}" data-j="${j}" type="number" inputmode="decimal" step="${kgMode() ? "0.5" : "1"}" value="${dispW(s.lbs)}" placeholder="${exo.type === "bodyweight" ? "+" + u : u}" />
         <input class="st-in st-reps" data-i="${i}" data-j="${j}" type="number" inputmode="numeric" value="${s.reps}" placeholder="reps" />
         <button class="st-check ${s.done ? "done" : ""}" data-check="${i}-${j}">✓</button>
       </div>`).join("");
@@ -1323,7 +1411,7 @@ function renderWorkout() {
         </div>
         ${rankHtml}
         <div class="settable">
-          <div class="st-headrow"><span>SET</span><span>PREV</span><span>LBS</span><span>REPS</span><span></span></div>
+          <div class="st-headrow"><span>SET</span><span>PREV</span><span>${u.toUpperCase()}</span><span>REPS</span><span></span></div>
           ${rows}
           <button class="addset-row" data-addset="${i}">＋ ADD SET</button>
         </div>
@@ -1338,7 +1426,14 @@ function renderWorkout() {
   list.querySelectorAll("[data-restedit]").forEach((b) => b.addEventListener("click", () => editRest(+b.dataset.restedit)));
   list.querySelectorAll("[data-addset]").forEach((b) => b.addEventListener("click", () => addSet(+b.dataset.addset)));
   list.querySelectorAll("[data-check]").forEach((b) => b.addEventListener("click", () => { const [i, j] = b.dataset.check.split("-").map(Number); completeSet(i, j); }));
-  list.querySelectorAll(".st-lbs").forEach((inp) => inp.addEventListener("input", () => setField(+inp.dataset.i, +inp.dataset.j, "lbs", inp.value)));
+  // weight field: user types in the display unit; STORE the LB equivalent in s.lbs so
+  // the engine + lastSets stay canonical pounds. Blank stays blank. (No re-render →
+  // keeps focus, same as before.)
+  list.querySelectorAll(".st-lbs").forEach((inp) => inp.addEventListener("input", () => {
+    const raw = inp.value.trim();
+    const lb = raw === "" ? "" : Math.round(fromInputWeight(raw));
+    setField(+inp.dataset.i, +inp.dataset.j, "lbs", lb);
+  }));
   list.querySelectorAll(".st-reps").forEach((inp) => inp.addEventListener("input", () => setField(+inp.dataset.i, +inp.dataset.j, "reps", inp.value)));
 }
 
@@ -1393,7 +1488,7 @@ function renderYourRanks() {
       row.innerHTML = `
         <div class="rankrow-top">
           <span class="rankrow-ex">${e.name}</span>
-          <span class="rankrow-beast">${b.emoji} ${b.name} <small>· ~${rec.oneRM} lb</small></span>
+          <span class="rankrow-beast">${b.emoji} ${b.name} <small>· ~${toDisplayWeight(rec.oneRM)} ${unitLabel()}</small></span>
         </div>
         <div class="progress"><i style="width:${pct}%"></i></div>
         <div class="rankrow-foot">${next}<span class="rankrow-mmr">MMR ${mmrTxt}</span></div>`;
@@ -2167,8 +2262,14 @@ function renderHome() {
   }
   const top = todaySets().reduce((m, s) => Math.max(m, s.oneRM), 0);
   document.getElementById("statStreak").textContent = computeStreak();
-  document.getElementById("statTop").textContent = top ? top.toLocaleString() : "0";
+  document.getElementById("statTop").textContent = top ? toDisplayWeight(top).toLocaleString() : "0";
+  const topLbl = document.getElementById("statTopLbl");
+  if (topLbl) topLbl.textContent = `top 1RM (${unitLabel()})`;
   document.getElementById("statExers").textContent = Object.keys(bests).length;
+  // pre-fill the Log-screen bodyweight in the current display unit (skip while editing)
+  if (bwInput && document.activeElement !== bwInput) bwInput.value = profile.bodyweight ? toDisplayWeight(profile.bodyweight) : "";
+  const bwLbl = document.getElementById("bwLbl");
+  if (bwLbl) bwLbl.firstChild && (bwLbl.childNodes[0].nodeValue = `Your bodyweight (${unitLabel()}) `);
   renderHomeQuests();
   refreshAvatars();
 }
@@ -2318,7 +2419,13 @@ function renderProfile() {
   const av = document.getElementById("peAvatarPreview");
   if (nameI) nameI.value = profile.name || "";
   if (bioI) bioI.value = profile.bio || "";
-  if (bwI) bwI.value = profile.bodyweight || "";
+  if (bwI) bwI.value = profile.bodyweight ? toDisplayWeight(profile.bodyweight) : "";
+  // bodyweight field label reflects the current unit
+  const bwLbl = document.getElementById("peBwLbl");
+  if (bwLbl) bwLbl.firstChild && (bwLbl.childNodes[0].nodeValue = `Bodyweight (${unitLabel()}) `);
+  // reflect the persisted units choice on the lb/kg toggle
+  document.querySelectorAll("#peUnitBtns .pe-unit").forEach((btn) =>
+    btn.classList.toggle("active", btn.dataset.unit === profile.units));
   if (favI) favI.innerHTML = favoriteSelectHtml();   // rebuild + pre-select current favorite
   if (av) av.innerHTML = avatarInner();
   updateBioCount();
@@ -2367,6 +2474,25 @@ let stagedAvatar = null;
     if (preview) preview.innerHTML = "🦎";
   });
   if (bioI) bioI.addEventListener("input", updateBioCount);
+  // lb / kg units toggle — persists profile.units (synced) and re-renders every view
+  // that shows weights so numbers + labels flip immediately. Stored data stays in LB.
+  document.querySelectorAll("#peUnitBtns .pe-unit").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const u = btn.dataset.unit === "kg" ? "kg" : "lb";
+      if (profile.units === u) return;
+      // commit whatever's typed in the bw field FIRST (interpreted in the OLD unit)
+      // so flipping the unit doesn't reinterpret an in-progress entry.
+      const bwI2 = document.getElementById("peBw");
+      if (bwI2 && bwI2.value.trim() !== "") applyBodyweight(bwI2.value);
+      profile.units = u;
+      try { save(); } catch (e) {}
+      try { renderProfile(); } catch (e) {}
+      try { renderHome(); } catch (e) {}
+      try { renderPlates(); } catch (e) {}
+      try { renderProgress(); } catch (e) {}
+      if (soundOn) blip();
+    });
+  });
   if (saveBtn) saveBtn.addEventListener("click", () => {
     const nameI = document.getElementById("peName");
     const bwI = document.getElementById("peBw");
@@ -2713,7 +2839,7 @@ function renderHistory() {
       row.innerHTML = `
         <div class="rankrow-top">
           <span class="rankrow-ex">${e.name}</span>
-          <span class="rankrow-beast">${b.emoji} ~${rec.oneRM} lb <small>· ${prettyDate(rec.date)}</small></span>
+          <span class="rankrow-beast">${b.emoji} ~${toDisplayWeight(rec.oneRM)} ${unitLabel()} <small>· ${prettyDate(rec.date)}</small></span>
         </div>`;
       prBox.appendChild(row);
     });
@@ -2752,7 +2878,7 @@ document.getElementById("flexBtn").addEventListener("click", () => {
   const lifts = ranked.map((e) => {
     const rec = bests[e.id];
     const fb = classify(rec.mmr) || byId(rec.beast) || BEASTS[0];
-    return `<div class="fc-lift"><span>${fb.emoji} ${e.name}</span><b>~${rec.oneRM} lb</b></div>`;
+    return `<div class="fc-lift"><span>${fb.emoji} ${e.name}</span><b>~${toDisplayWeight(rec.oneRM)} ${unitLabel()}</b></div>`;
   }).join("") || `<div class="fc-lift"><span>No lifts logged yet</span><b>—</b></div>`;
 
   document.getElementById("flexCard").innerHTML = `
@@ -3068,16 +3194,17 @@ function renderProgress() {
     drawLiftChart(sel.value);
   }
 
-  // bodyweight
-  const bwS = bodyweightSeries();
+  // bodyweight (stored LB → show in the display unit)
+  const bwS = bodyweightSeries().map((p) => ({ ...p, value: toDisplayWeight(p.value) }));
   document.getElementById("progBw").innerHTML = svgLineChart(bwS, {
-    color: "#36c47b", unit: "lb",
+    color: "#36c47b", unit: unitLabel(),
     empty: "Set your bodyweight in Log to start a trend.",
   }) + (bwS.length === 1 ? `<p class="chart-note">Log your weight over time to see a trend.</p>` : "");
 
-  // volume
-  document.getElementById("progVolume").innerHTML = svgLineChart(volumeSeries(), {
-    color: "#7c83ff", unit: "lb",
+  // volume (Σ load×reps in LB → show in the display unit)
+  const volS = volumeSeries().map((p) => ({ ...p, value: toDisplayWeight(p.value) }));
+  document.getElementById("progVolume").innerHTML = svgLineChart(volS, {
+    color: "#7c83ff", unit: unitLabel(),
     empty: "Finish a workout to chart session volume.",
   });
 }
@@ -3201,7 +3328,7 @@ function drawRankCard() {
       ctx.fillText(`${fb.emoji}  ${e.name}`, 90, ly);
       ctx.textAlign = "right";
       ctx.fillStyle = accent;
-      ctx.fillText(`~${rec.oneRM} lb`, W - 90, ly);
+      ctx.fillText(`~${toDisplayWeight(rec.oneRM)} ${unitLabel()}`, W - 90, ly);
       ly += 56;
     });
   } else {
@@ -3397,12 +3524,13 @@ function obCommitStep() {
     const bwEl = document.getElementById("obBw");
     const errEl = document.getElementById("obBwErr");
     if (errEl) errEl.textContent = "";
-    const v = parseInt(bwEl ? bwEl.value : "", 10);
+    const v = parseFloat(bwEl ? bwEl.value : "");
     if (!v || v <= 0) {
       if (errEl) errEl.textContent = "Enter your bodyweight to continue.";
       return false;
     }
-    applyBodyweight(v);   // stores it, seeds the trend log, recomputes MMR
+    // entered in the current display unit (default lb); applyBodyweight converts → LB.
+    applyBodyweight(bwEl ? bwEl.value : v);   // stores it, seeds the trend log, recomputes MMR
     return true;
   }
   return true;
@@ -3432,7 +3560,9 @@ function maybeShowOnboarding() {
   const bwEl   = document.getElementById("obBw");
   if (nameEl) nameEl.value = profile.name || "";
   if (userEl) userEl.value = profile.username || "";
-  if (bwEl)   bwEl.value = profile.bodyweight || "";
+  if (bwEl)   bwEl.value = profile.bodyweight ? toDisplayWeight(profile.bodyweight) : "";
+  const obBwLbl = document.getElementById("obBwLbl");
+  if (obBwLbl) obBwLbl.firstChild && (obBwLbl.childNodes[0].nodeValue = `Bodyweight (${unitLabel()}) `);
 
   ov.classList.remove("hidden");
   ov.setAttribute("aria-hidden", "false");

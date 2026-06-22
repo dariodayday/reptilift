@@ -70,7 +70,7 @@
       </nav>
       <div class="statbar">
         <div class="stat"><span id="statStreak">0</span><label>day streak</label></div>
-        <div class="stat"><span id="statTop">0</span><label>top 1RM</label></div>
+        <div class="stat"><span id="statTop">0</span><label id="statTopLbl">top 1RM</label></div>
         <div class="stat"><span id="statExers">0</span><label>ranked lifts</label></div>
       </div>
     </section>
@@ -163,7 +163,7 @@
       <p class="hint">Enter a target weight and pick your bar — we'll show the plates to load on each side.</p>
 
       <div class="plates">
-        <label class="pe-label">Target weight (lbs)
+        <label class="pe-label" id="plTargetLbl">Target weight (lbs)
           <input type="number" id="plTarget" min="0" step="2.5" inputmode="decimal" placeholder="e.g. 225" autocomplete="off" />
         </label>
 
@@ -215,8 +215,15 @@
           <span class="pe-counter" id="peBioCount">0 / 160</span>
         </label>
 
-        <label class="pe-label">Bodyweight (lbs)
-          <input type="number" id="peBw" min="0" inputmode="numeric" placeholder="used to rank bodyweight lifts" />
+        <label class="pe-label" id="peUnitsLbl">Units
+          <div class="pe-unitbtns" id="peUnitBtns">
+            <button class="pe-unit" data-unit="lb" type="button">lb</button>
+            <button class="pe-unit" data-unit="kg" type="button">kg</button>
+          </div>
+        </label>
+
+        <label class="pe-label" id="peBwLbl">Bodyweight (lbs)
+          <input type="number" id="peBw" min="0" inputmode="decimal" step="0.5" placeholder="used to rank bodyweight lifts" />
         </label>
 
         <label class="pe-label">Favorite lift
@@ -442,8 +449,8 @@
       <h2 class="section-title">Workout</h2>
 
       <div class="profilebar">
-        <label>Your bodyweight (lbs)
-          <input type="number" id="bw" placeholder="set it once" min="0" inputmode="numeric" />
+        <label id="bwLbl">Your bodyweight (lbs)
+          <input type="number" id="bw" placeholder="set it once" min="0" inputmode="decimal" step="0.5" />
         </label>
         <span class="profilehint">used to rank bodyweight lifts</span>
         <label class="soundtoggle">
@@ -519,7 +526,7 @@
     </section>
 
     <footer class="footer">
-      Reptilift v9.27 — rough cut
+      Reptilift v9.28 — rough cut
       <button id="replayIntro" class="replay">↻ replay intro</button>
     </footer>
 
@@ -618,8 +625,8 @@
         <div class="ob-emoji">⚖️</div>
         <h2 class="ob-title">Your bodyweight</h2>
         <p class="ob-sub">MMR is strength relative to <b>your</b> bodyweight, so we need this to rank your lifts.</p>
-        <label class="ob-label">Bodyweight (lbs)
-          <input type="number" id="obBw" min="0" inputmode="numeric" placeholder="e.g. 180" />
+        <label class="ob-label" id="obBwLbl">Bodyweight (lbs)
+          <input type="number" id="obBw" min="0" inputmode="decimal" step="0.5" placeholder="e.g. 180" />
         </label>
         <span class="ob-err" id="obBwErr"></span>
       </div>
