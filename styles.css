@@ -817,6 +817,15 @@ body {
 }
 .profilehero .ph-avatar img { width: 100%; height: 100%; object-fit: cover; }
 .profilehero .ph-name { font-size: 26px; font-weight: 900; position: relative; }
+.profilehero .ph-handle {
+  background: none; border: none; font: inherit; cursor: pointer;
+  color: var(--muted); font-size: 14px; padding: 2px 6px; border-radius: 8px;
+  transition: color .15s, background .15s;
+}
+.profilehero .ph-handle:hover { color: var(--text); background: rgba(255,255,255,.05); }
+.profilehero .ph-handle.ph-handle-empty {
+  color: var(--gold); border: 1px dashed rgba(212,175,55,.4);
+}
 .profilehero .ph-rank {
   position: relative; display: inline-flex; align-items: center; gap: 6px;
   margin-top: 6px; font-size: 15px; font-weight: 800; color: var(--c, var(--accent));

@@ -1,4 +1,4 @@
-// Reptilift v3.17 — earn your beast rank per exercise from your MMR.
+// Reptilift v3.18 — earn your beast rank per exercise from your MMR.
 // v3.16 adds a first-run ONBOARDING wizard (#onboard). Shown ONCE to brand-new
 // users after the intro finishes — detected as NOT profile.onboarded AND no real
 // data (no bodyweight, no sets, no workouts). Existing users are implicitly flagged
@@ -2081,11 +2081,15 @@ function renderProfile() {
     hero.innerHTML = `
       <div class="ph-avatar"${frStyle ? ` style="${frStyle}"` : ""}>${avatarInner()}</div>
       <div class="ph-name"${ncStyle ? ` style="${ncStyle}"` : ""}>${escapeHtml(name)}</div>
-      ${profile.username ? `<div class="ph-handle">@${escapeHtml(profile.username)}</div>` : ""}
+      ${profile.username
+        ? `<button type="button" class="ph-handle" id="phHandle">@${escapeHtml(profile.username)}</button>`
+        : (cloudUser ? `<button type="button" class="ph-handle ph-handle-empty" id="phHandle">+ set @handle</button>` : "")}
       <div class="ph-rank">${rankTxt}</div>
       <div class="ph-mmr"><span>Overall MMR</span><b>${mmr != null ? mmr.toLocaleString() : "—"}</b></div>
       ${profile.bio ? `<div class="ph-bio">${escapeHtml(profile.bio)}</div>` : ""}
       ${ms ? `<div class="ph-member">Member since ${ms}</div>` : ""}`;
+    const phH = document.getElementById("phHandle");
+    if (phH) phH.addEventListener("click", () => { try { openUsernameModal(); } catch (e) {} });
   }
 
   const statsBox = document.getElementById("profileStats");
@@ -3402,12 +3406,10 @@ async function doPublishPublicProfile() {
 // only repaint it if it's the active panel, but the username prompt fires regardless.
 function onCloudAuthChanged() {
   if (cloudUser) {
-    if (!profile.username || !USERNAME_RE.test(profile.username)) {
-      // give the login/sync flow a beat to settle, then nudge for a handle.
-      setTimeout(() => { try { openUsernameModal(); } catch (e) {} }, 600);
-    } else {
-      publishPublicProfile();
-    }
+    // No forced handle prompt on startup — claiming a @handle is an option on the
+    // Profile page (and the Friends page). publishPublicProfile() no-ops until a
+    // valid handle exists, then publishes the public row.
+    publishPublicProfile();
     // on login, finalize any past-deadline duels even if the tab is never opened.
     try { if (typeof updateMyDuels === "function") updateMyDuels(); } catch (e) {}
   }
