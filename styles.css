@@ -85,11 +85,14 @@
   #app { opacity: 1; transition: none; }
 }
 
+/* dark-green base so the iOS overscroll "rubber-band" area shows green, not white */
+html { background: #0a1f16; }
 body {
   background:
     radial-gradient(900px 540px at 50% -8%, rgba(54,196,123,.28), transparent 70%),
     linear-gradient(180deg, #103222 0%, #0a1f16 100%);
   background-attachment: fixed;
+  min-height: 100vh;
   color: var(--text);
   font-family: var(--font);
   -webkit-font-smoothing: antialiased;
