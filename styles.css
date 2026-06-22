@@ -1017,6 +1017,12 @@ body {
 .pe-saved { display: inline-block; margin-left: 12px; color: var(--accent); font-weight: 800; font-size: 14px; }
 .pe-saved.hidden { display: none; }
 .pe-account { width: 100%; margin-top: 14px; }
+.pe-accountlink {
+  display: block; margin: 16px auto 2px; background: none; border: none;
+  color: var(--muted); font: inherit; font-size: 13px; cursor: pointer;
+  text-decoration: underline; text-underline-offset: 3px; opacity: .85;
+}
+.pe-accountlink:hover { color: var(--text); opacity: 1; }
 
 /* ===== contact page ===== */
 .contact {
