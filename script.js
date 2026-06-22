@@ -1,4 +1,4 @@
-// Reptilift v3.22 — earn your beast rank per exercise from your MMR.
+// Reptilift v3.23 — earn your beast rank per exercise from your MMR.
 // v3.16 adds a first-run ONBOARDING wizard (#onboard). Shown ONCE to brand-new
 // users after the intro finishes — detected as NOT profile.onboarded AND no real
 // data (no bodyweight, no sets, no workouts). Existing users are implicitly flagged
@@ -78,8 +78,14 @@ let cloudSuppress = false;   // true while applyCloud() is writing keys (don't e
   const raw = localStorage.setItem.bind(localStorage);
   localStorage.setItem = function (key, value) {
     raw(key, value);
-    if (!cloudSuppress && cloudUser && typeof key === "string" && key.indexOf("reptilift_") === 0) {
-      try { if (typeof scheduleCloudPush === "function") scheduleCloudPush(); } catch (e) {}
+    // Any real data change (not our own bookkeeping key) stamps a local "last
+    // modified" time, so login can auto-keep the newer of local vs cloud without
+    // prompting. Written via raw() to avoid recursing through this hook.
+    if (typeof key === "string" && key.indexOf("reptilift_") === 0 && key !== "reptilift_lastmod") {
+      try { if (!cloudSuppress) raw("reptilift_lastmod", String(Date.now())); } catch (e) {}
+      if (!cloudSuppress && cloudUser) {
+        try { if (typeof scheduleCloudPush === "function") scheduleCloudPush(); } catch (e) {}
+      }
     }
   };
 })();
@@ -3399,7 +3405,7 @@ async function onLogin(user) {
   }
   try {
     const { data: row, error } = await supa
-      .from("progress").select("data").eq("user_id", user.id).maybeSingle();
+      .from("progress").select("data, updated_at").eq("user_id", user.id).maybeSingle();
     if (error) throw error;
 
     const cloud = row && row.data;
@@ -3419,12 +3425,12 @@ async function onLogin(user) {
       applyCloud(cloud);                     // empty device → just take the cloud save
       return;
     }
-    const load = confirm(
-      "Load your cloud save? This will REPLACE the progress on this device.\n\n" +
-      "OK = load cloud save  ·  Cancel = keep this device’s progress (overwrites cloud)"
-    );
-    if (load) applyCloud(cloud);             // cloud wins (reloads)
-    else await pushCloud();                  // local wins — overwrite cloud
+    // Both sides have data: AUTO-KEEP the more recently modified one — no prompt.
+    // localMod = this device's last data change; cloudMod = the row's updated_at.
+    const localMod = parseInt(localStorage.getItem("reptilift_lastmod") || "0", 10) || 0;
+    const cloudMod = row && row.updated_at ? Date.parse(row.updated_at) : 0;
+    if (cloudMod > localMod) applyCloud(cloud);   // cloud is newer → load it (reloads)
+    else await pushCloud();                       // local is newer (or tie) → keep local, push up
   } catch (e) {
     setSyncStatus("offline");
   }
