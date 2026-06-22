@@ -1296,6 +1296,31 @@ body {
 .chart-empty { color: var(--muted); font-size: 14px; text-align: center; padding: 28px 12px; }
 .chart-note { color: var(--muted); font-size: 12px; text-align: center; margin-top: 8px; }
 
+/* ===== training calendar heatmap ===== */
+.prog-heatmap { width: 100%; }
+.hm-stats {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 14px;
+}
+.hm-stat {
+  background: var(--bg); border: 1px solid var(--line); border-radius: var(--r-chip);
+  padding: 9px 4px; text-align: center; display: flex; flex-direction: column; gap: 2px;
+}
+.hm-stat b {
+  font-family: var(--font-display); font-size: 20px; font-weight: 800; color: var(--gold);
+  line-height: 1; font-variant-numeric: tabular-nums;
+}
+.hm-stat span { font-size: 10px; color: var(--muted); letter-spacing: .2px; line-height: 1.15; }
+.hm-scroll { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 4px; }
+.hm-svg { display: block; max-width: 100%; height: auto; }
+.hm-svg .hm-month { fill: var(--muted); font-size: 9px; font-family: var(--font-display); }
+.hm-svg .hm-wd { fill: var(--muted); font-size: 8px; text-anchor: end; font-family: var(--font-display); }
+.hm-svg .hm-cell { transition: fill-opacity .12s; }
+.hm-legend { display: flex; align-items: center; gap: 4px; margin-top: 10px; justify-content: flex-end; }
+.hm-leg-lab { font-size: 11px; color: var(--muted); }
+.hm-leg-cell { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+.hm-empty { color: var(--muted); font-size: 13px; text-align: center; margin-top: 12px; }
+@media (max-width: 360px) { .hm-stat b { font-size: 18px; } .hm-stat span { font-size: 9px; } }
+
 /* ===== rank card (canvas preview + share) ===== */
 .cardprev {
   background: #06140d; border: 1px solid var(--line); border-radius: 16px;

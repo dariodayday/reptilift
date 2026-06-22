@@ -1,4 +1,12 @@
-// Reptilift v3.25 — earn your beast rank per exercise from your MMR.
+// Reptilift v3.26 — earn your beast rank per exercise from your MMR.
+// v3.26 adds a TRAINING CALENDAR heatmap to the Progress page (#progHeatmap):
+// a GitHub-contributions-style inline-SVG grid of the last ~26 weeks (columns =
+// weeks, rows = Sun–Sat), each day colored by how many sets were logged that date
+// (0/1–3/4–8/9–15/16+ → 5-level green→gold ramp), with a Less→More legend, month
+// labels, a today ring, and per-day <title> tooltips. A stats row shows current
+// streak (computeStreak), longest streak (longestStreak over the streak day-set),
+// total training days, and days trained in the last 30. Rendered only from
+// renderProgress (load-order safe, fully guarded); no new storage keys.
 // v3.16 adds a first-run ONBOARDING wizard (#onboard). Shown ONCE to brand-new
 // users after the intro finishes — detected as NOT profile.onboarded AND no real
 // data (no bodyweight, no sets, no workouts). Existing users are implicitly flagged
@@ -2899,7 +2907,141 @@ function volumeSeries() {
     .filter((p) => p.value > 0);
 }
 
+// ===== training calendar heatmap (GitHub-contributions style) =====
+// Per-day training intensity = the NUMBER OF SETS logged that date (a simple,
+// robust signal that exists for every set regardless of bodyweight/load history).
+// Counts come straight from `sets` (each entry has a YYYY-MM-DD `date`); bridged
+// streak days from items are NOT counted as activity (no sets were lifted).
+// Buckets (level 0–4): 0 = rest, 1 = light (1–3 sets), 2 = medium (4–8),
+// 3 = heavy (9–15), 4 = beast (16+). Colors run the app's green→gold scale.
+function setsByDate() {
+  const map = {};
+  (sets || []).forEach((s) => { if (s && s.date) map[s.date] = (map[s.date] || 0) + 1; });
+  return map;
+}
+function heatLevel(count) {
+  if (!count) return 0;
+  if (count <= 3) return 1;
+  if (count <= 8) return 2;
+  if (count <= 15) return 3;
+  return 4;
+}
+// green→gold intensity ramp (level 0 = faint base cell, 4 = bright gold "beast").
+const HEAT_COLORS = ["#16352a", "#1f6b46", "#2fa564", "#7fcf5a", "#f2c14e"];
+const HEAT_LABELS = ["Rest", "Light", "Medium", "Heavy", "Beast"];
+
+// Longest run of consecutive training days across ALL history (uses the same day
+// set as the streak: logged sets OR item-bridged days). Pure date math, no Date
+// parsing pitfalls — walks each day and checks if (day - 1) is also present.
+function longestStreak() {
+  const days = streakDays();
+  if (!days.size) return 0;
+  let best = 0;
+  const oneDay = 864e5;
+  days.forEach((d) => {
+    const [y, m, dd] = d.split("-").map(Number);
+    const prev = fmtDate(new Date(new Date(y, m - 1, dd).getTime() - oneDay));
+    if (days.has(prev)) return;            // not the start of a run
+    let len = 0, cur = new Date(y, m - 1, dd);
+    while (days.has(fmtDate(cur))) { len++; cur = new Date(cur.getTime() + oneDay); }
+    if (len > best) best = len;
+  });
+  return best;
+}
+
+// Build the heatmap as an inline SVG grid: columns = weeks (oldest left), rows =
+// days of week (Sun top → Sat bottom). Shows the trailing ~26 weeks ending this
+// week so it fits a phone (horizontally scrollable for older weeks). Never throws.
+function heatmapSVG() {
+  const counts = setsByDate();
+  const WEEKS = 26;                         // ~6 months, mobile-friendly
+  const cell = 13, gap = 3, step = cell + gap;
+  const padTop = 16, padLeft = 20;          // room for month labels + weekday rail
+  const today = new Date();
+  // grid spans whole weeks (Sun→Sat). `start` = the Sunday that begins the oldest
+  // week; rows map cleanly to day-of-week. Calendar arithmetic (setDate) avoids
+  // DST drift you'd get from raw millisecond math. Column w / row d = start + days.
+  const todayMid = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const start = new Date(todayMid);
+  start.setDate(start.getDate() - today.getDay() - (WEEKS - 1) * 7);  // Sunday, WEEKS-1 back
+  const dayAt = (offset) => { const x = new Date(start); x.setDate(x.getDate() + offset); return x; };
+  const W = padLeft + WEEKS * step;
+  const H = padTop + 7 * step;
+
+  let cells = "", monthLabels = "", lastMonth = -1;
+  const todayKey = fmtDate(today);
+  for (let w = 0; w < WEEKS; w++) {
+    const colDate = dayAt(w * 7);
+    // month label when a new month first appears at the top of a column
+    if (colDate.getMonth() !== lastMonth) {
+      lastMonth = colDate.getMonth();
+      const mx = padLeft + w * step;
+      monthLabels += `<text x="${mx}" y="11" class="hm-month">${colDate.toLocaleDateString(undefined, { month: "short" })}</text>`;
+    }
+    for (let d = 0; d < 7; d++) {
+      const day = dayAt(w * 7 + d);
+      if (day > todayMid) continue;                 // don't draw days that haven't happened yet
+      const key = fmtDate(day);
+      const c = counts[key] || 0;
+      const lvl = heatLevel(c);
+      const x = padLeft + w * step, y = padTop + d * step;
+      const ring = key === todayKey ? ` stroke="#f2c14e" stroke-width="1.5"` : "";
+      const title = `${prettyDate(key)} — ${c} ${c === 1 ? "set" : "sets"}`;
+      cells += `<rect x="${x}" y="${y}" width="${cell}" height="${cell}" rx="3" fill="${HEAT_COLORS[lvl]}"${ring} class="hm-cell" data-day="${key}" data-c="${c}">` +
+        `<title>${title}</title></rect>`;
+    }
+  }
+  // weekday rail (Mon / Wed / Fri to keep it sparse)
+  const wd = ["", "M", "", "W", "", "F", ""];
+  let railLabels = "";
+  wd.forEach((lab, d) => {
+    if (!lab) return;
+    railLabels += `<text x="${padLeft - 6}" y="${padTop + d * step + cell - 2}" class="hm-wd">${lab}</text>`;
+  });
+
+  return `<div class="hm-scroll"><svg class="hm-svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="Training calendar heatmap">${monthLabels}${railLabels}${cells}</svg></div>`;
+}
+
+// Legend (Less → More) using the same color ramp.
+function heatmapLegend() {
+  const swatches = HEAT_COLORS.map((c, i) =>
+    `<span class="hm-leg-cell" style="background:${c}" title="${HEAT_LABELS[i]}"></span>`).join("");
+  return `<div class="hm-legend"><span class="hm-leg-lab">Less</span>${swatches}<span class="hm-leg-lab">More</span></div>`;
+}
+
+// Summary stats row: current streak, longest streak, total training days, last-30.
+function heatmapStats() {
+  const days = streakDays();
+  const total = days.size;
+  const cur = computeStreak();
+  const longest = longestStreak();
+  const cutoff = fmtDate(new Date(Date.now() - 29 * 864e5));   // inclusive 30-day window
+  let last30 = 0;
+  days.forEach((d) => { if (d >= cutoff) last30++; });
+  const stat = (val, lab) => `<div class="hm-stat"><b>${val}</b><span>${lab}</span></div>`;
+  return `<div class="hm-stats">${stat(cur, "Current streak")}${stat(longest, "Longest streak")}${stat(total, "Training days")}${stat(last30, "Last 30 days")}</div>`;
+}
+
+// Render the whole Training Calendar block into #progHeatmap. Guarded for missing
+// DOM (load-order safe — only ever called from renderProgress). Empty history →
+// a friendly prompt under an all-faint grid.
+function renderHeatmap() {
+  const host = document.getElementById("progHeatmap");
+  if (!host) return;
+  try {
+    const hasData = (sets && sets.length) || streakDays().size;
+    const empty = hasData ? "" :
+      `<p class="hm-empty">No sessions yet — train to fill this in. 🦎</p>`;
+    host.innerHTML = heatmapStats() + heatmapSVG() + heatmapLegend() + empty;
+  } catch (e) {
+    host.innerHTML = `<p class="chart-empty">Calendar unavailable.</p>`;
+  }
+}
+
 function renderProgress() {
+  // training calendar heatmap (guarded; renders its own empty state)
+  try { renderHeatmap(); } catch (e) {}
+
   // overall MMR
   const ob = overallBeast();
   const oColor = ob ? ob.color : "#f2c14e";
