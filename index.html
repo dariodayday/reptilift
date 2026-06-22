@@ -201,7 +201,8 @@
         <div class="fr-tabs">
           <button class="fr-tab active" data-frtab="friends" type="button">Friends</button>
           <button class="fr-tab" data-frtab="requests" type="button">Requests <span class="fr-badge hidden" id="frReqBadge">0</span></button>
-          <button class="fr-tab" data-frtab="board" type="button">🏆 Leaderboard</button>
+          <button class="fr-tab" data-frtab="duels" type="button">⚔️ Duels <span class="fr-badge hidden" id="frDuelBadge">0</span></button>
+          <button class="fr-tab" data-frtab="board" type="button">🏆 Board</button>
         </div>
 
         <!-- FRIENDS sub-panel -->
@@ -222,6 +223,12 @@
           <div id="frOutgoing" class="fr-list"></div>
         </div>
 
+        <!-- DUELS sub-panel -->
+        <div class="fr-sub" data-frpanel="duels">
+          <button class="btn duel-new-btn" id="duelNewBtn" type="button">⚔️ New duel</button>
+          <div id="duelBody" class="duel-body"></div>
+        </div>
+
         <!-- LEADERBOARD sub-panel -->
         <div class="fr-sub" data-frpanel="board">
           <div class="fr-boardtoggle">
@@ -238,6 +245,30 @@
       <div class="modal-inner">
         <div class="fp-card" id="friendCard"></div>
         <button class="btn ghost" id="friendClose">Close</button>
+      </div>
+    </div>
+
+    <!-- CREATE DUEL -->
+    <div id="duelModal" class="modal hidden">
+      <div class="modal-inner">
+        <div class="duel-card">
+          <div class="duel-modal-emoji">⚔️</div>
+          <h2 class="duel-modal-title">Challenge a friend</h2>
+          <p class="duel-modal-sub">Most MMR gained wins. Strength differences don't matter — it's all about improvement.</p>
+          <label class="duel-lbl">Opponent</label>
+          <select id="duelOpp" class="duel-select"></select>
+          <label class="duel-lbl">Lift</label>
+          <select id="duelLift" class="duel-select"></select>
+          <label class="duel-lbl">Duration</label>
+          <div class="duel-durrow" id="duelDurRow">
+            <button class="duel-dur active" data-days="7" type="button">1 week</button>
+            <button class="duel-dur" data-days="14" type="button">2 weeks</button>
+            <button class="duel-dur" data-days="30" type="button">1 month</button>
+          </div>
+          <div class="duel-modal-err" id="duelErr"></div>
+          <button class="btn" id="duelSend" type="button">Send challenge ⚔️</button>
+          <button class="btn ghost" id="duelCancel" type="button">Cancel</button>
+        </div>
       </div>
     </div>
 
@@ -389,12 +420,15 @@
       </div>
       <p class="hint">Spend 🦎 Scales on streak protection and coin boosts.</p>
       <div id="shopList" class="shoplist"></div>
+      <h3 class="sub">Cosmetics</h3>
+      <p class="hint">Unlock looks that show off on your profile, leaderboard row &amp; rank card. Equip any you own.</p>
+      <div id="cosmeticList" class="coslist"></div>
       <h3 class="sub">Inventory</h3>
       <div id="inventoryList" class="invlist"></div>
     </section>
 
     <footer class="footer">
-      Reptilift v9.7 — rough cut
+      Reptilift v9.9 — rough cut
       <button id="replayIntro" class="replay">↻ replay intro</button>
     </footer>
 

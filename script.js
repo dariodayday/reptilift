@@ -1,4 +1,4 @@
-// Reptilift v3.13 — earn your beast rank per exercise from your MMR.
+// Reptilift v3.15 — earn your beast rank per exercise from your MMR.
 // v3.13 adds FRIENDS + LEADERBOARD (requires login). Two new Supabase tables:
 // public_profiles (one publicly-readable row per user: username, name, small avatar,
 // overall_mmr, beast_id, streak — powers leaderboards) and friendships (request
@@ -265,6 +265,17 @@ if (typeof profile.username !== "string") profile.username = "";   // public @ha
 // normalize the handle defensively at load with PLAIN guards only (no helper calls —
 // keeps load-order safe): lowercase, strip to [a-z0-9_], cap at 20.
 profile.username = profile.username.toLowerCase().replace(/[^a-z0-9_]/g, "").slice(0, 20);
+// cosmetics live inside the synced profile (reptilift_profile, in SYNC_KEYS) so owned +
+// equipped cosmetics auto-push to the cloud and come down on other devices. Shape:
+//   { owned: { <itemId>: 1, ... }, equipped: { theme, frame, nameColor, border } }
+// Default = nothing equipped (current look). Normalize with PLAIN guards only here —
+// no helper calls at load time (load-order safe; see the catalog/COSMETICS below).
+if (!profile.cosmetics || typeof profile.cosmetics !== "object") profile.cosmetics = {};
+if (!profile.cosmetics.owned || typeof profile.cosmetics.owned !== "object") profile.cosmetics.owned = {};
+if (!profile.cosmetics.equipped || typeof profile.cosmetics.equipped !== "object") profile.cosmetics.equipped = {};
+["theme", "frame", "nameColor", "border"].forEach((slot) => {
+  if (typeof profile.cosmetics.equipped[slot] !== "string") profile.cosmetics.equipped[slot] = "";
+});
 let sets = JSON.parse(localStorage.getItem("reptilift_sets") || "[]");   // every set, all time
 let bests = JSON.parse(localStorage.getItem("reptilift_bests") || "{}"); // exId -> {beast, oneRM, date}
 let customEx = JSON.parse(localStorage.getItem("reptilift_customex") || "[]");
@@ -784,6 +795,8 @@ function finishWorkout() {
   // stats changed (MMR/streak) — refresh the public leaderboard row. Debounced &
   // guarded; no-op when logged out / no username / offline.
   try { if (typeof publishPublicProfile === "function") publishPublicProfile(); } catch (e) {}
+  // push any duel progress I made this session to my active duels' *_current columns.
+  try { if (typeof updateMyDuels === "function") updateMyDuels(); } catch (e) {}
 }
 
 // Collect one finish-time celebration per exercise that ranked up this session.
@@ -1363,6 +1376,120 @@ const SHOP = [
     invKey: "booster" },
 ];
 
+// ===== COSMETICS: a Scales sink with four equip slots =======================
+// Owned + equipped state lives in profile.cosmetics (reptilift_profile → SYNC_KEYS,
+// so it cloud-syncs). Each slot has a "" default (= current/no cosmetic look).
+//   theme     — alternate palette/background for the shareable rank card (owner-only).
+//   frame     — decorative ring around the avatar (profile + leaderboard; PUBLISHED).
+//   nameColor — color/gradient on the display name (profile + leaderboard; PUBLISHED).
+//   border    — border/glow style for the profile header card (owner-only).
+// Prices are aspirational (a real sink). Each item carries the visual data it needs:
+//   theme: { bg:[topHex,botHex], accent, wordmark } drives drawRankCard.
+//   frame: { ring, glow } CSS colors (used to build a ring via box-shadow/border).
+//   nameColor: { color } solid, or { gradient:[a,b] } for a text gradient.
+//   border: { color, glow } for the profile header card frame.
+const COSMETICS = {
+  theme: [
+    { id: "themeMolten", name: "Molten",  price: 350, swatch: "linear-gradient(135deg,#ff5a1f,#7a1502)",
+      bg: ["#2a0d06", "#120402"], accent: "#ff7a33", wordmark: "#ffb37a" },
+    { id: "themeToxic",  name: "Toxic",   price: 350, swatch: "linear-gradient(135deg,#7CFF4F,#0a3d12)",
+      bg: ["#0a2410", "#04130a"], accent: "#8dff52", wordmark: "#c6ff9e" },
+    { id: "themeRoyal",  name: "Royal",   price: 500, swatch: "linear-gradient(135deg,#a06bff,#f2c14e)",
+      bg: ["#1a0e33", "#0a0518"], accent: "#b288ff", wordmark: "#f2c14e" },
+    { id: "themeCarbon", name: "Carbon",  price: 250, swatch: "linear-gradient(135deg,#3a3f44,#0c0e0d)",
+      bg: ["#1a1d1f", "#0a0b0c"], accent: "#c9ced4", wordmark: "#eaf5ee" },
+    { id: "themeAbyss",  name: "Abyss",   price: 450, swatch: "linear-gradient(135deg,#2eb6ff,#04203a)",
+      bg: ["#06223a", "#020c16"], accent: "#39c0ff", wordmark: "#9fe3ff" },
+  ],
+  frame: [
+    { id: "frameGold",  name: "Gold Ring",   price: 200, ring: "#f2c14e", glow: "#f2c14e" },
+    { id: "frameFlame", name: "Flame Ring",  price: 300, ring: "#ff7a33", glow: "#ff4d1f" },
+    { id: "frameNeon",  name: "Neon Ring",   price: 300, ring: "#39c0ff", glow: "#2eb6ff" },
+    { id: "frameScale", name: "Beast Scale", price: 400, ring: "#8dff52", glow: "#5fd23a" },
+    { id: "framePlasma",name: "Plasma Ring", price: 500, ring: "#b288ff", glow: "#a06bff" },
+  ],
+  nameColor: [
+    { id: "nameGold",   name: "Gold",        price: 150, color: "#f2c14e" },
+    { id: "nameMolten", name: "Molten",      price: 250, gradient: ["#ff9a3d", "#ff3d2e"] },
+    { id: "nameToxic",  name: "Toxic",       price: 250, color: "#8dff52" },
+    { id: "nameRoyal",  name: "Royal",       price: 300, gradient: ["#b288ff", "#f2c14e"] },
+    { id: "nameIce",    name: "Ice",         price: 300, gradient: ["#9fe3ff", "#39c0ff"] },
+  ],
+  border: [
+    { id: "borderGold",   name: "Gold Glow",   price: 250, color: "#f2c14e", glow: "#f2c14e" },
+    { id: "borderFlame",  name: "Flame Glow",  price: 350, color: "#ff7a33", glow: "#ff4d1f" },
+    { id: "borderNeon",   name: "Neon Glow",   price: 350, color: "#39c0ff", glow: "#2eb6ff" },
+    { id: "borderRoyal",  name: "Royal Glow",  price: 450, color: "#b288ff", glow: "#a06bff" },
+  ],
+};
+const COSMETIC_SLOTS = [
+  { slot: "theme",     label: "Rank-Card Theme", hint: "Recolors your shareable rank card" },
+  { slot: "frame",     label: "Avatar Frame",    hint: "A ring shown on your avatar & leaderboard row" },
+  { slot: "nameColor", label: "Name Color",      hint: "Tints your display name everywhere" },
+  { slot: "border",    label: "Profile Border",  hint: "A glow around your profile header" },
+];
+// flat lookup: itemId → { slot, ...item }. Built once; guarded so a bad shape is skipped.
+const COSMETIC_BY_ID = (() => {
+  const m = {};
+  try {
+    Object.keys(COSMETICS).forEach((slot) => {
+      (COSMETICS[slot] || []).forEach((it) => { if (it && it.id) m[it.id] = Object.assign({ slot }, it); });
+    });
+  } catch (e) {}
+  return m;
+})();
+// is an item owned? (guarded)
+function cosmeticOwned(id) {
+  try { return !!(profile.cosmetics && profile.cosmetics.owned && profile.cosmetics.owned[id]); }
+  catch (e) { return false; }
+}
+// the equipped item object for a slot, or null. Falls back to null if the equipped id
+// is no longer owned/known (so a removed cosmetic cleanly reverts to default).
+function equippedCosmetic(slot) {
+  try {
+    const id = profile.cosmetics && profile.cosmetics.equipped && profile.cosmetics.equipped[slot];
+    if (!id || !cosmeticOwned(id)) return null;
+    const it = COSMETIC_BY_ID[id];
+    return it && it.slot === slot ? it : null;
+  } catch (e) { return null; }
+}
+// equip (or, with id="" / unowned, unequip) a slot. Persists + re-publishes social bits.
+function equipCosmetic(slot, id) {
+  try {
+    if (!profile.cosmetics.equipped || typeof profile.cosmetics.equipped !== "object") profile.cosmetics.equipped = {};
+    profile.cosmetics.equipped[slot] = (id && cosmeticOwned(id) && COSMETIC_BY_ID[id] && COSMETIC_BY_ID[id].slot === slot) ? id : "";
+    save();
+    try { if (typeof publishPublicProfile === "function") publishPublicProfile(); } catch (e) {}
+  } catch (e) {}
+}
+// CSS for an avatar frame given a frame item (or null). Returns "" for none.
+function frameStyleCss(fr) {
+  if (!fr || !fr.ring) return "";
+  return `box-shadow:0 0 0 3px ${fr.ring}, 0 0 16px ${hexA(fr.glow || fr.ring, 0.7)};border-color:${fr.ring} !important;`;
+}
+// inline style for a display name given a nameColor item (or null). Returns "".
+function nameColorCss(nc) {
+  if (!nc) return "";
+  if (nc.gradient && nc.gradient.length === 2) {
+    return `background:linear-gradient(90deg,${nc.gradient[0]},${nc.gradient[1]});-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:${nc.gradient[1]};`;
+  }
+  if (nc.color) return `color:${nc.color};`;
+  return "";
+}
+// Resolve a published row's small cosmetics blob ({frame, nameColor}) into objects.
+// Guarded so null/legacy rows just yield {}.
+function rowCosmetics(p) {
+  const out = { frame: null, nameColor: null };
+  try {
+    const c = p && p.cosmetics;
+    if (c && typeof c === "object") {
+      if (c.frame && COSMETIC_BY_ID[c.frame] && COSMETIC_BY_ID[c.frame].slot === "frame") out.frame = COSMETIC_BY_ID[c.frame];
+      if (c.nameColor && COSMETIC_BY_ID[c.nameColor] && COSMETIC_BY_ID[c.nameColor].slot === "nameColor") out.nameColor = COSMETIC_BY_ID[c.nameColor];
+    }
+  } catch (e) {}
+  return out;
+}
+
 // roll the daily counters over when the calendar day changes (browser Date).
 function rolloverDaily() {
   const t = todayStr();
@@ -1414,6 +1541,7 @@ function renderShop() {
     box.appendChild(card);
   });
   box.querySelectorAll("[data-buy]").forEach((b) => b.addEventListener("click", () => buyItem(b.dataset.buy)));
+  renderCosmeticShop();
   renderInventory();
 }
 function buyItem(id) {
@@ -1422,6 +1550,64 @@ function buyItem(id) {
   addCoins(-item.price);
   inventory[item.invKey] = (inventory[item.invKey] || 0) + 1;
   saveEconomy();
+  if (soundOn) blip();
+  renderShop();
+}
+
+// small visual preview for a cosmetic shop card (matches its slot).
+function cosmeticPreview(c) {
+  if (c.slot === "theme")  return `<span class="cos-prev cos-prev-theme" style="background:${c.swatch}"></span>`;
+  if (c.slot === "frame")  return `<span class="cos-prev cos-prev-frame" style="${frameStyleCss(c)}">🦎</span>`;
+  if (c.slot === "border") return `<span class="cos-prev cos-prev-border" style="border-color:${c.color};box-shadow:0 0 14px ${hexA(c.glow || c.color, 0.8)}"></span>`;
+  if (c.slot === "nameColor") return `<span class="cos-prev cos-prev-name" style="${nameColorCss(c)}">Name</span>`;
+  return `<span class="cos-prev"></span>`;
+}
+// Cosmetics storefront: one labeled group per slot, each item shows a preview, name,
+// and Buy/Owned. Buying deducts Scales and adds to owned; blocked (clear msg) if short.
+function renderCosmeticShop() {
+  const box = document.getElementById("cosmeticList");
+  if (!box) return;
+  box.innerHTML = "";
+  COSMETIC_SLOTS.forEach((s) => {
+    const grp = document.createElement("div");
+    grp.className = "cos-group";
+    const items = (COSMETICS[s.slot] || []).map((c) => {
+      const owned = cosmeticOwned(c.id);
+      const equipped = (profile.cosmetics.equipped[s.slot] === c.id) && owned;
+      const btn = owned
+        ? (equipped ? `<span class="cos-eq">✓ Equipped</span>` : `<button class="btn ghost cos-act" data-cos-equip="${c.id}">Equip</button>`)
+        : `<button class="btn cos-act" data-cos-buy="${c.id}">${COIN} ${c.price}</button>`;
+      return `<div class="cos-item${equipped ? " on" : ""}">
+        ${cosmeticPreview(c)}
+        <div class="cos-info"><div class="cos-name">${c.name}</div>
+          <div class="cos-tag">${owned ? "Owned" : "Locked"}</div></div>
+        ${btn}</div>`;
+    }).join("");
+    grp.innerHTML = `<div class="cos-grouptitle">${s.label}<span>${s.hint}</span></div>
+      <div class="cos-items">${items}</div>`;
+    box.appendChild(grp);
+  });
+  box.querySelectorAll("[data-cos-buy]").forEach((b) => b.addEventListener("click", () => buyCosmetic(b.dataset.cosBuy)));
+  box.querySelectorAll("[data-cos-equip]").forEach((b) => b.addEventListener("click", () => {
+    const c = COSMETIC_BY_ID[b.dataset.cosEquip]; if (!c) return;
+    equipCosmetic(c.slot, c.id);
+    if (soundOn) blip();
+    renderShop();
+    try { const pp = document.getElementById("profile-page"); if (typeof renderProfile === "function" && pp && pp.classList.contains("active")) renderProfile(); } catch (e) {}
+  }));
+}
+// buy a cosmetic: guard unknown/owned, deduct Scales (clear message if short), add to
+// owned, auto-equip it for instant gratification, persist, re-publish social bits.
+function buyCosmetic(id) {
+  const c = COSMETIC_BY_ID[id]; if (!c) return;
+  if (cosmeticOwned(id)) return;
+  if (wallet.balance < c.price) { alert(`Not enough ${CUR}. You need ${c.price - wallet.balance} more ${COIN}.`); return; }
+  addCoins(-c.price);
+  profile.cosmetics.owned[id] = 1;
+  profile.cosmetics.equipped[c.slot] = id;   // auto-equip the fresh purchase
+  saveEconomy();                              // persist the wallet/lifetime change
+  save();                                     // persist profile cosmetics (cloud auto-push)
+  try { if (typeof publishPublicProfile === "function") publishPublicProfile(); } catch (e) {}
   if (soundOn) blip();
   renderShop();
 }
@@ -1855,9 +2041,22 @@ function renderProfile() {
     const name = profile.name ? profile.name : "Unnamed Lifter";
     const rankTxt = b ? `${b.emoji} ${b.name}` : "🥚 Unranked";
     const ms = memberSince();
+    // equipped cosmetics: frame (avatar ring), nameColor (display name), border (card).
+    const fr = equippedCosmetic("frame");
+    const nc = equippedCosmetic("nameColor");
+    const bd = equippedCosmetic("border");
+    if (bd) {
+      hero.style.borderColor = bd.color;
+      hero.style.boxShadow = `0 0 0 1px ${bd.color} inset, 0 0 26px ${hexA(bd.glow || bd.color, 0.5)}`;
+    } else {
+      hero.style.borderColor = "";
+      hero.style.boxShadow = "";
+    }
+    const frStyle = frameStyleCss(fr);
+    const ncStyle = nameColorCss(nc);
     hero.innerHTML = `
-      <div class="ph-avatar">${avatarInner()}</div>
-      <div class="ph-name">${escapeHtml(name)}</div>
+      <div class="ph-avatar"${frStyle ? ` style="${frStyle}"` : ""}>${avatarInner()}</div>
+      <div class="ph-name"${ncStyle ? ` style="${ncStyle}"` : ""}>${escapeHtml(name)}</div>
       ${profile.username ? `<div class="ph-handle">@${escapeHtml(profile.username)}</div>` : ""}
       <div class="ph-rank">${rankTxt}</div>
       <div class="ph-mmr"><span>Overall MMR</span><b>${mmr != null ? mmr.toLocaleString() : "—"}</b></div>
@@ -2337,14 +2536,20 @@ function drawRankCard() {
   const cv = rankCanvas, ctx = cv.getContext("2d");
   const W = cv.width, H = cv.height;
   const b = overallBeast();
-  const accent = b ? b.color : "#f2c14e";
+  // equipped rank-card theme (owner-only). Guarded: a missing/removed theme → default
+  // palette (beast-accent green card). theme.accent overrides the beast color when set.
+  const theme = equippedCosmetic("theme");
+  const accent = theme && theme.accent ? theme.accent : (b ? b.color : "#f2c14e");
+  const wordmarkColor = theme && theme.wordmark ? theme.wordmark : "#f2c14e";
+  const bgTop = theme && theme.bg ? theme.bg[0] : "#0e2a1f";
+  const bgBot = theme && theme.bg ? theme.bg[1] : "#06140d";
   const mmr = overallMMR();
   const streak = computeStreak();
   const liftCount = Object.keys(bests).length;
 
   // background
   const bg = ctx.createLinearGradient(0, 0, 0, H);
-  bg.addColorStop(0, "#0e2a1f"); bg.addColorStop(1, "#06140d");
+  bg.addColorStop(0, bgTop); bg.addColorStop(1, bgBot);
   ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
   // accent glow at top
   const glow = ctx.createRadialGradient(W / 2, 120, 40, W / 2, 120, 720);
@@ -2357,7 +2562,7 @@ function drawRankCard() {
   ctx.textAlign = "center";
 
   // wordmark
-  ctx.fillStyle = "#f2c14e";
+  ctx.fillStyle = wordmarkColor;
   ctx.font = "700 64px Rajdhani, sans-serif";
   ctx.fillText("REPTILIFT", W / 2, 150);
   ctx.fillStyle = hexA("#eaf5ee", 0.6);
@@ -2401,9 +2606,9 @@ function drawRankCard() {
   ctx.fillText(b ? `MMR BAND ${beastRange(b)}` : "Log a workout to rank up", W / 2, 728);
 
   // big MMR number
-  ctx.fillStyle = "#f2c14e";
+  ctx.fillStyle = wordmarkColor;
   ctx.font = "700 200px Rajdhani, sans-serif";
-  ctx.shadowColor = hexA("#f2c14e", 0.5); ctx.shadowBlur = 40;
+  ctx.shadowColor = hexA(wordmarkColor, 0.5); ctx.shadowBlur = 40;
   ctx.fillText(mmr != null ? String(mmr) : "—", W / 2, 920);
   ctx.shadowBlur = 0;
   ctx.fillStyle = hexA("#eaf5ee", 0.6);
@@ -2974,6 +3179,14 @@ async function doPublishPublicProfile() {
       lastPublishedAvatar = { src: profile.avatar, small };
     }
     const ob = (typeof overallBeast === "function") ? overallBeast() : null;
+    // publish ONLY the socially-visible equipped cosmetics (frame + nameColor) — themes
+    // and borders only matter on the owner's own screen/card, so keep the blob small.
+    // Guarded; falls back to null so legacy rows / errors never break the upsert.
+    let cosmetics = null;
+    try {
+      const fr = equippedCosmetic("frame"), nc = equippedCosmetic("nameColor");
+      if (fr || nc) cosmetics = { frame: fr ? fr.id : null, nameColor: nc ? nc.id : null };
+    } catch (e) {}
     const row = {
       user_id: cloudUser.id,
       username: profile.username,
@@ -2982,6 +3195,7 @@ async function doPublishPublicProfile() {
       overall_mmr: (typeof overallMMR === "function" && overallMMR()) || 0,
       beast_id: ob ? ob.id : null,
       streak: (typeof computeStreak === "function" && computeStreak()) || 0,
+      cosmetics: cosmetics,
       updated_at: new Date().toISOString(),
     };
     const { error } = await supa.from("public_profiles").upsert(row, { onConflict: "user_id" });
@@ -2989,6 +3203,8 @@ async function doPublishPublicProfile() {
   } catch (e) {
     // offline / RLS / unique-collision-on-old-handle — never crash; retries next call.
   }
+  // my MMR just changed → sync it into any active duels I'm part of (guarded/debounced).
+  try { if (typeof updateMyDuels === "function") updateMyDuels(); } catch (e) {}
 }
 
 // ---- onCloudAuthChanged(): called from onLogin / onLogout -------------------
@@ -3125,8 +3341,10 @@ function renderFriendsPage() {
   const me = document.getElementById("frMe");
   if (me) {
     if (profile.username && USERNAME_RE.test(profile.username)) {
-      me.innerHTML = `<span class="fr-me-av">${avatarInner()}</span>
-        <span class="fr-me-info"><b>${escapeHtml(profile.name || "You")}</b>
+      const meFr = frameStyleCss(equippedCosmetic("frame"));
+      const meNc = nameColorCss(equippedCosmetic("nameColor"));
+      me.innerHTML = `<span class="fr-me-av"${meFr ? ` style="${meFr}"` : ""}>${avatarInner()}</span>
+        <span class="fr-me-info"><b${meNc ? ` style="${meNc}"` : ""}>${escapeHtml(profile.name || "You")}</b>
         <span class="fr-me-handle">@${escapeHtml(profile.username)}</span></span>
         <button class="fr-me-edit" id="frEditHandle" type="button">change</button>`;
       const eh = document.getElementById("frEditHandle");
@@ -3147,9 +3365,11 @@ function renderFriendsPage() {
 
   if (frActiveTab === "friends") loadFriendsList();
   else if (frActiveTab === "requests") loadRequests();
+  else if (frActiveTab === "duels") loadDuels();
   else if (frActiveTab === "board") loadBoard();
 
   refreshRequestBadge();   // always keep the badge count fresh
+  refreshDuelBadge();      // incoming-duels count badge
 }
 
 // ---- data helpers (all guarded, return [] on failure) ----------------------
@@ -3173,7 +3393,7 @@ async function fetchProfiles(ids) {
   try {
     const { data, error } = await supa
       .from("public_profiles")
-      .select("user_id, username, name, avatar, overall_mmr, beast_id, streak")
+      .select("user_id, username, name, avatar, overall_mmr, beast_id, streak, cosmetics")
       .in("user_id", list);
     if (error) throw error;
     (data || []).forEach((p) => { out[p.user_id] = p; });
@@ -3201,10 +3421,13 @@ async function loadFriendsList() {
     const name = (p && (p.name || p.username)) || "Lifter";
     const handle = p && p.username ? `@${p.username}` : "";
     const mmr = (p && p.overall_mmr) || 0;
+    const cos = rowCosmetics(p);
+    const frStyle = frameStyleCss(cos.frame);
+    const ncStyle = nameColorCss(cos.nameColor);
     return `<button class="fr-card" data-friend="${id}" type="button">
-      <span class="fr-card-av">${frAvatar(p)}</span>
+      <span class="fr-card-av"${frStyle ? ` style="${frStyle}"` : ""}>${frAvatar(p)}</span>
       <span class="fr-card-main">
-        <span class="fr-card-name">${escapeHtml(name)}</span>
+        <span class="fr-card-name"${ncStyle ? ` style="${ncStyle}"` : ""}>${escapeHtml(name)}</span>
         <span class="fr-card-handle">${escapeHtml(handle)}</span>
       </span>
       <span class="fr-card-rank">${beastEmojiFor(p && p.beast_id)} <b>${mmr.toLocaleString()}</b></span>
@@ -3360,11 +3583,18 @@ function boardRowHtml(pos, p, isMe) {
   const handle = p && p.username ? `@${p.username}` : "";
   const mmr = (p && p.overall_mmr) || 0;
   const medal = pos === 1 ? "🥇" : pos === 2 ? "🥈" : pos === 3 ? "🥉" : "";
+  // cosmetics: my own row uses live local equips (published data may lag); friend/global
+  // rows use the small published cosmetics blob. Both guarded so null rows render plainly.
+  const cos = isMe
+    ? { frame: equippedCosmetic("frame"), nameColor: equippedCosmetic("nameColor") }
+    : rowCosmetics(p);
+  const frStyle = frameStyleCss(cos.frame);
+  const ncStyle = nameColorCss(cos.nameColor);
   return `<div class="lb-row${isMe ? " me" : ""}">
     <span class="lb-pos">${medal || pos}</span>
-    <span class="lb-av">${frAvatar(p)}</span>
+    <span class="lb-av"${frStyle ? ` style="${frStyle}"` : ""}>${frAvatar(p)}</span>
     <span class="lb-main">
-      <span class="lb-name">${escapeHtml(name)}${isMe ? " <small>(you)</small>" : ""}</span>
+      <span class="lb-name"${ncStyle ? ` style="${ncStyle}"` : ""}>${escapeHtml(name)}${isMe ? " <small>(you)</small>" : ""}</span>
       <span class="lb-handle">${escapeHtml(handle)}</span>
     </span>
     <span class="lb-rank">${beastEmojiFor(p && p.beast_id)} <b>${mmr.toLocaleString()}</b></span>
@@ -3401,7 +3631,7 @@ async function loadGlobalBoard() {
   try {
     const { data, error } = await supa
       .from("public_profiles")
-      .select("user_id, username, name, avatar, overall_mmr, beast_id, streak")
+      .select("user_id, username, name, avatar, overall_mmr, beast_id, streak, cosmetics")
       .order("overall_mmr", { ascending: false })
       .limit(50);
     if (error) throw error;
@@ -3451,7 +3681,13 @@ function openFriendModal(uid, p) {
         <div class="fp-stat"><b>${mmr.toLocaleString()}</b><span>Overall MMR</span></div>
         <div class="fp-stat"><b>${streak.toLocaleString()}</b><span>day streak</span></div>
       </div>
+      <button class="btn fp-challenge" id="fpChallenge" type="button">⚔️ Challenge</button>
       <button class="btn ghost fp-unfriend" id="fpUnfriend" type="button">Unfriend</button>`;
+    const ch = document.getElementById("fpChallenge");
+    if (ch) ch.addEventListener("click", () => {
+      closeFriendModal();
+      openDuelModal({ id: uid, name: (p && (p.name || p.username)) || "Lifter", username: p && p.username });
+    });
     const uf = document.getElementById("fpUnfriend");
     if (uf) uf.addEventListener("click", () => unfriend(uid));
   }
@@ -3470,10 +3706,452 @@ const friendCloseBtn = document.getElementById("friendClose");
 if (friendCloseBtn) friendCloseBtn.addEventListener("click", closeFriendModal);
 if (friendModal) friendModal.addEventListener("click", (e) => { if (e.target === friendModal) closeFriendModal(); });
 
+// ============================================================================
+// ===== FRIEND DUELS (challenges) ============================================
+// ============================================================================
+// A duel = two friends race to GAIN the most MMR on a chosen lift (or Overall)
+// before a deadline. Improvement-based, so absolute strength never matters.
+// Backed by one Supabase table `challenges` under the user's own auth (RLS limits
+// rows to participants). Everything is fetched live — NO new localStorage keys.
+// Self-reported caveat: the UPDATE policy lets either participant write the row,
+// so each side's *_current MMR is client-self-reported and trusted (fine for a
+// fun feature). Resolution is client-side: whoever loads a past-deadline active
+// duel finalizes it (guarded against double-resolve).
+// LOAD-ORDER NOTE: every function here is only called from event handlers,
+// switchTab, the finishWorkout/publish hooks, or renderFriendsPage — never from a
+// top-level statement.
+
+const DUEL_STATUSES_LIVE = ["pending", "active"];
+
+// my current MMR for a duel's exercise: 'overall' → overallMMR(), else best per-lift.
+function duelMyMmr(exId) {
+  try {
+    if (exId === "overall") return (overallMMR && overallMMR()) || 0;
+    const rec = bests[exId];
+    return (rec && typeof rec.mmr === "number") ? rec.mmr : 0;
+  } catch (e) { return 0; }
+}
+
+// fetch every challenge row touching me (RLS already restricts to participant rows).
+async function fetchMyDuels() {
+  if (!supa || !cloudUser) return [];
+  try {
+    const { data, error } = await supa
+      .from("challenges")
+      .select("*")
+      .or(`challenger_id.eq.${cloudUser.id},opponent_id.eq.${cloudUser.id}`)
+      .order("created_at", { ascending: false });
+    if (error) throw error;
+    return data || [];
+  } catch (e) { return []; }
+}
+
+// ---- CREATE DUEL modal -----------------------------------------------------
+let duelModalDays = 7;            // selected duration (days)
+let duelPrefillFriend = null;     // { id, name, username } when opened from a profile
+let duelBusy = false;
+
+function duelLiftOptions() {
+  // 'Overall MMR' first, then every exercise grouped subtly by name. Reuse EXERCISES().
+  let html = `<option value="overall">⭐ Overall MMR</option>`;
+  try {
+    EXERCISES().forEach((e) => {
+      html += `<option value="${escapeHtml(e.id)}">${escapeHtml(e.name)}</option>`;
+    });
+  } catch (e) {}
+  return html;
+}
+
+async function openDuelModal(prefill) {
+  const modal = document.getElementById("duelModal");
+  if (!modal) return;
+  if (!supa || !cloudUser) return;     // can't duel logged out — button is gated anyway
+  duelPrefillFriend = prefill || null;
+  duelModalDays = 7;
+  const err = document.getElementById("duelErr");
+  if (err) err.textContent = "";
+  const liftSel = document.getElementById("duelLift");
+  if (liftSel) liftSel.innerHTML = duelLiftOptions();
+  document.querySelectorAll("#duelDurRow .duel-dur").forEach((b) =>
+    b.classList.toggle("active", b.dataset.days === "7"));
+
+  // populate opponent dropdown from accepted friends.
+  const oppSel = document.getElementById("duelOpp");
+  if (oppSel) {
+    oppSel.innerHTML = `<option value="">Loading friends…</option>`;
+    const edges = await fetchMyEdges();
+    const accepted = edges.filter((e) => e.status === "accepted");
+    const ids = accepted.map((e) => e.requester_id === cloudUser.id ? e.addressee_id : e.requester_id);
+    if (!ids.length) {
+      oppSel.innerHTML = `<option value="">No friends yet</option>`;
+    } else {
+      const profs = await fetchProfiles(ids);
+      oppSel.innerHTML = ids.map((id) => {
+        const p = profs[id];
+        const label = (p && (p.name || p.username)) || "Lifter";
+        const h = p && p.username ? ` @${p.username}` : "";
+        return `<option value="${id}" data-name="${escapeHtml((p && (p.name || p.username)) || "Lifter")}" data-un="${escapeHtml((p && p.username) || "")}">${escapeHtml(label)}${escapeHtml(h)}</option>`;
+      }).join("");
+      if (duelPrefillFriend && ids.includes(duelPrefillFriend.id)) oppSel.value = duelPrefillFriend.id;
+    }
+  }
+  modal.classList.remove("hidden");
+}
+function closeDuelModal() {
+  const modal = document.getElementById("duelModal");
+  if (modal) modal.classList.add("hidden");
+}
+
+async function submitDuel() {
+  if (duelBusy) return;
+  const err = document.getElementById("duelErr");
+  const setErr = (t) => { if (err) err.textContent = t || ""; };
+  const oppSel = document.getElementById("duelOpp");
+  const liftSel = document.getElementById("duelLift");
+  if (!oppSel || !liftSel) return;
+  const oppId = oppSel.value;
+  if (!oppId) { setErr("Add a friend first to challenge them."); return; }
+  const opt = oppSel.options[oppSel.selectedIndex];
+  const oppName = (opt && opt.dataset.name) || "Lifter";
+  const exId = liftSel.value || "overall";
+  let exName = "Overall MMR";
+  if (exId !== "overall") { const ex = exById(exId); exName = ex ? ex.name : exId; }
+
+  if (!supa || !cloudUser) { setErr("Sign in to start a duel."); return; }
+  duelBusy = true;
+  const sendBtn = document.getElementById("duelSend");
+  if (sendBtn) { sendBtn.disabled = true; sendBtn.textContent = "…"; }
+  try {
+    // block a duplicate live (pending/active) duel with this friend on this same lift.
+    const mine = await fetchMyDuels();
+    const dup = mine.find((d) => DUEL_STATUSES_LIVE.includes(d.status) && d.exercise_id === exId &&
+      ((d.challenger_id === cloudUser.id && d.opponent_id === oppId) ||
+       (d.opponent_id === cloudUser.id && d.challenger_id === oppId)));
+    if (dup) { setErr("You already have an active duel with them on this lift."); return; }
+
+    const myMmr = duelMyMmr(exId);
+    const deadline = new Date(Date.now() + duelModalDays * 864e5).toISOString();
+    const myName = (profile.name || profile.username || "You").slice(0, 24);
+    const { error } = await supa.from("challenges").insert({
+      challenger_id: cloudUser.id,
+      opponent_id: oppId,
+      exercise_id: exId,
+      exercise_name: exName,
+      challenger_name: myName,
+      opponent_name: oppName,
+      status: "pending",
+      deadline: deadline,
+      challenger_start: myMmr,
+      challenger_current: myMmr,
+    });
+    if (error) throw error;
+    if (soundOn) { try { blip(); } catch (e) {} }
+    closeDuelModal();
+    frActiveTab = "duels";
+    renderFriendsPage();
+  } catch (e) {
+    setErr("Couldn't send that challenge — try again.");
+  } finally {
+    duelBusy = false;
+    if (sendBtn) { sendBtn.disabled = false; sendBtn.textContent = "Send challenge ⚔️"; }
+  }
+}
+
+// ---- updateMyDuels(): sync MY current MMR into each active duel I'm in -------
+// Recompute my side's current MMR locally and UPDATE only if it changed. Debounced
+// + guarded; safe to call from finishWorkout / publish / opening the Duels tab.
+let updateDuelsTimer = null;
+let updatingDuels = false;
+function updateMyDuels() {
+  if (!supa || !cloudUser) return;
+  clearTimeout(updateDuelsTimer);
+  updateDuelsTimer = setTimeout(() => { updateDuelsTimer = null; doUpdateMyDuels(); }, 900);
+}
+async function doUpdateMyDuels() {
+  if (!supa || !cloudUser || updatingDuels) return;
+  updatingDuels = true;
+  try {
+    const mine = await fetchMyDuels();
+    const active = mine.filter((d) => d.status === "active");
+    for (const d of active) {
+      const mineIsChallenger = d.challenger_id === cloudUser.id;
+      const cur = duelMyMmr(d.exercise_id);
+      const stored = mineIsChallenger ? d.challenger_current : d.opponent_current;
+      if (cur === stored) continue;
+      const patch = mineIsChallenger ? { challenger_current: cur } : { opponent_current: cur };
+      try { await supa.from("challenges").update(patch).eq("id", d.id); } catch (e) {}
+    }
+  } catch (e) {} finally { updatingDuels = false; }
+}
+
+// ---- resolve a past-deadline active duel client-side (idempotent) ----------
+// Whoever views it finalizes: winner = the higher gain, null on tie. Guarded so a
+// double-resolve never fires (only update if still 'active'); returns the patched row.
+async function resolveDuel(d) {
+  try {
+    const cGain = (d.challenger_current || 0) - (d.challenger_start || 0);
+    const oGain = (d.opponent_current || 0) - (d.opponent_start || 0);
+    let winner = null;
+    if (cGain > oGain) winner = d.challenger_id;
+    else if (oGain > cGain) winner = d.opponent_id;
+    const { data, error } = await supa.from("challenges")
+      .update({ status: "completed", winner_id: winner })
+      .eq("id", d.id).eq("status", "active").select();
+    if (error) throw error;
+    const row = (data && data[0]) || null;
+    // celebratory toast only if *I* won and this client actually performed the update.
+    if (row && winner === cloudUser.id) { try { queueDuelWinToast(row); } catch (e) {} }
+    return row || { ...d, status: "completed", winner_id: winner };
+  } catch (e) { return { ...d, status: "completed" }; }
+}
+
+// ---- DUELS tab render ------------------------------------------------------
+async function loadDuels() {
+  const box = document.getElementById("duelBody");
+  if (!box) return;
+  if (!supa || !cloudUser) {
+    box.innerHTML = `<div class="fr-empty">Sign in to duel your friends. 🦎</div>`;
+    return;
+  }
+  box.innerHTML = `<div class="fr-empty">Loading duels…</div>`;
+  // sync my own progress first, then fetch a fresh snapshot.
+  try { await doUpdateMyDuels(); } catch (e) {}
+  let duels = await fetchMyDuels();
+
+  // resolve any active duels whose deadline has passed (idempotent / guarded).
+  const now = Date.now();
+  for (let i = 0; i < duels.length; i++) {
+    const d = duels[i];
+    if (d.status === "active" && d.deadline && new Date(d.deadline).getTime() <= now) {
+      duels[i] = await resolveDuel(d);
+    }
+  }
+
+  const incoming = duels.filter((d) => d.status === "pending" && d.opponent_id === cloudUser.id);
+  const outgoing = duels.filter((d) => d.status === "pending" && d.challenger_id === cloudUser.id);
+  const active = duels.filter((d) => d.status === "active");
+  const done = duels.filter((d) => d.status === "completed").slice(0, 12);
+
+  let html = "";
+  if (incoming.length) {
+    html += `<h3 class="sub">⚔️ Incoming challenges</h3>` +
+      incoming.map((d) => duelPendingCard(d, "incoming")).join("");
+  }
+  if (active.length) {
+    html += `<h3 class="sub">🔥 Active duels</h3>` + active.map(duelActiveCard).join("");
+  }
+  if (outgoing.length) {
+    html += `<h3 class="sub">⏳ Waiting on them</h3>` +
+      outgoing.map((d) => duelPendingCard(d, "outgoing")).join("");
+  }
+  if (done.length) {
+    html += `<h3 class="sub">🏁 Past duels</h3>` + done.map(duelDoneCard).join("");
+  }
+  if (!html) {
+    html = `<div class="fr-empty">No duels yet. Hit <b>New duel</b> to challenge a friend — most MMR gained wins. ⚔️</div>`;
+  }
+  box.innerHTML = html;
+
+  // wire actions
+  box.querySelectorAll("[data-accept-duel]").forEach((b) =>
+    b.addEventListener("click", () => acceptDuel(b.dataset.acceptDuel)));
+  box.querySelectorAll("[data-decline-duel]").forEach((b) =>
+    b.addEventListener("click", () => declineDuel(b.dataset.declineDuel)));
+  box.querySelectorAll("[data-cancel-duel]").forEach((b) =>
+    b.addEventListener("click", () => cancelDuel(b.dataset.cancelDuel)));
+
+  refreshDuelBadge();
+}
+
+// who am I in this duel? returns { mine, theirs } normalized sides.
+function duelSides(d) {
+  const iAmCh = d.challenger_id === cloudUser.id;
+  return {
+    iAmChallenger: iAmCh,
+    myName: iAmCh ? d.challenger_name : d.opponent_name,
+    theirName: iAmCh ? d.opponent_name : d.challenger_name,
+    myGain: (iAmCh ? (d.challenger_current || 0) - (d.challenger_start || 0)
+                   : (d.opponent_current || 0) - (d.opponent_start || 0)),
+    theirGain: (iAmCh ? (d.opponent_current || 0) - (d.opponent_start || 0)
+                      : (d.challenger_current || 0) - (d.challenger_start || 0)),
+  };
+}
+function gainStr(g) { return (g > 0 ? "+" : "") + (g || 0).toLocaleString(); }
+function timeLeftStr(deadline) {
+  if (!deadline) return "";
+  const ms = new Date(deadline).getTime() - Date.now();
+  if (ms <= 0) return "ended";
+  const d = Math.floor(ms / 864e5);
+  if (d >= 1) return d + (d === 1 ? " day left" : " days left");
+  const h = Math.floor(ms / 36e5);
+  if (h >= 1) return h + (h === 1 ? " hour left" : " hours left");
+  const m = Math.max(1, Math.floor(ms / 6e4));
+  return m + (m === 1 ? " min left" : " mins left");
+}
+
+function duelPendingCard(d, dir) {
+  const s = duelSides(d);
+  const who = dir === "incoming" ? s.theirName : s.theirName;
+  const actions = dir === "incoming"
+    ? `<div class="duel-acts">
+         <button class="fr-mini ok" data-accept-duel="${d.id}" type="button">Accept</button>
+         <button class="fr-mini" data-decline-duel="${d.id}" type="button">Decline</button>
+       </div>`
+    : `<div class="duel-acts">
+         <span class="duel-waiting">waiting…</span>
+         <button class="fr-mini" data-cancel-duel="${d.id}" type="button">Cancel</button>
+       </div>`;
+  const verb = dir === "incoming" ? "challenged you" : "you challenged";
+  return `<div class="duel-row pending">
+    <div class="duel-row-head">
+      <span class="duel-lift">${escapeHtml(d.exercise_name || "Overall MMR")}</span>
+      <span class="duel-time">${escapeHtml(timeLeftStr(d.deadline))}</span>
+    </div>
+    <div class="duel-pending-line"><b>${escapeHtml(who)}</b> — ${verb}</div>
+    ${actions}
+  </div>`;
+}
+
+function duelActiveCard(d) {
+  const s = duelSides(d);
+  const meLead = s.myGain > s.theirGain;
+  const theyLead = s.theirGain > s.myGain;
+  const tie = s.myGain === s.theirGain;
+  const lead = tie ? `<span class="duel-lead tie">tied</span>`
+    : meLead ? `<span class="duel-lead me">you lead</span>`
+    : `<span class="duel-lead them">they lead</span>`;
+  return `<div class="duel-row active">
+    <div class="duel-row-head">
+      <span class="duel-lift">${escapeHtml(d.exercise_name || "Overall MMR")}</span>
+      <span class="duel-time">⏳ ${escapeHtml(timeLeftStr(d.deadline))}</span>
+    </div>
+    <div class="duel-vs">
+      <div class="duel-side mine${meLead ? " winning" : ""}">
+        <span class="duel-pname">${escapeHtml(s.myName || "You")}</span>
+        <span class="duel-gain">${gainStr(s.myGain)}</span>
+        <span class="duel-gainlbl">MMR gained</span>
+      </div>
+      <span class="duel-vs-x">VS</span>
+      <div class="duel-side theirs${theyLead ? " winning" : ""}">
+        <span class="duel-pname">${escapeHtml(s.theirName || "Rival")}</span>
+        <span class="duel-gain">${gainStr(s.theirGain)}</span>
+        <span class="duel-gainlbl">MMR gained</span>
+      </div>
+    </div>
+    <div class="duel-foot">${lead}</div>
+  </div>`;
+}
+
+function duelDoneCard(d) {
+  const s = duelSides(d);
+  let result, cls;
+  if (!d.winner_id) { result = "TIE"; cls = "tie"; }
+  else if (d.winner_id === cloudUser.id) { result = "WON"; cls = "won"; }
+  else { result = "LOST"; cls = "lost"; }
+  return `<div class="duel-row done ${cls}">
+    <div class="duel-row-head">
+      <span class="duel-lift">${escapeHtml(d.exercise_name || "Overall MMR")}</span>
+      <span class="duel-result ${cls}">${result}</span>
+    </div>
+    <div class="duel-done-line">
+      <span>${escapeHtml(s.myName || "You")} <b>${gainStr(s.myGain)}</b></span>
+      <span class="duel-vs-mini">vs</span>
+      <span>${escapeHtml(s.theirName || "Rival")} <b>${gainStr(s.theirGain)}</b></span>
+    </div>
+  </div>`;
+}
+
+// ---- duel mutations --------------------------------------------------------
+async function acceptDuel(id) {
+  if (duelBusy) return; duelBusy = true;
+  try {
+    // snapshot MY start = my current MMR for that lift right now.
+    const mine = await fetchMyDuels();
+    const d = mine.find((x) => x.id === id);
+    if (d && d.opponent_id === cloudUser.id) {
+      const myMmr = duelMyMmr(d.exercise_id);
+      const { error } = await supa.from("challenges").update({
+        status: "active", opponent_start: myMmr, opponent_current: myMmr,
+      }).eq("id", id);
+      if (error) throw error;
+      if (soundOn) { try { blip(); } catch (e) {} }
+    }
+  } catch (e) {} finally { duelBusy = false; }
+  loadDuels();
+}
+async function declineDuel(id) {
+  if (duelBusy) return; duelBusy = true;
+  try { await supa.from("challenges").update({ status: "declined" }).eq("id", id); } catch (e) {}
+  finally { duelBusy = false; }
+  loadDuels();
+}
+async function cancelDuel(id) {
+  if (duelBusy) return; duelBusy = true;
+  try { await supa.from("challenges").delete().eq("id", id); } catch (e) {}
+  finally { duelBusy = false; }
+  loadDuels();
+}
+
+// ---- incoming-duel count badge ---------------------------------------------
+async function refreshDuelBadge() {
+  const badge = document.getElementById("frDuelBadge");
+  if (!badge || !supa || !cloudUser) return;
+  try {
+    const { count, error } = await supa.from("challenges")
+      .select("id", { count: "exact", head: true })
+      .eq("opponent_id", cloudUser.id).eq("status", "pending");
+    if (error) throw error;
+    if (count && count > 0) { badge.textContent = count; badge.classList.remove("hidden"); }
+    else badge.classList.add("hidden");
+  } catch (e) { badge.classList.add("hidden"); }
+}
+
+// ---- duel-win toast (reuses the achievement toast styling) -----------------
+function queueDuelWinToast(d) {
+  let el = document.getElementById("achToast");
+  if (!el) {
+    el = document.createElement("div");
+    el.id = "achToast";
+    el.className = "achtoast";
+    document.body.appendChild(el);
+  }
+  el.innerHTML = `
+    <span class="at-ic">⚔️</span>
+    <span class="at-main">
+      <span class="at-tag">🏆 Duel won</span>
+      <span class="at-name">${escapeHtml(d.exercise_name || "Overall MMR")} <small>vs ${escapeHtml(d.challenger_id === cloudUser.id ? d.opponent_name : d.challenger_name)}</small></span>
+    </span>`;
+  el.classList.remove("show");
+  void el.offsetWidth;
+  el.classList.add("show");
+  if (soundOn) { try { playRankUpSfx(); } catch (e) {} buzz([20, 40, 20]); }
+  const close = () => { el.classList.remove("show"); el.removeEventListener("click", close); };
+  el.addEventListener("click", close);
+  setTimeout(close, 3000);
+}
+
 // ===== friends-page event wiring (bottom, after all helpers are defined) =====
 document.querySelectorAll(".fr-tab").forEach((t) => t.addEventListener("click", () => {
   frActiveTab = t.dataset.frtab; renderFriendsPage();
 }));
+// duel modal wiring
+(function wireDuelModal() {
+  const newBtn = document.getElementById("duelNewBtn");
+  if (newBtn) newBtn.addEventListener("click", () => openDuelModal(null));
+  const sendBtn = document.getElementById("duelSend");
+  if (sendBtn) sendBtn.addEventListener("click", submitDuel);
+  const cancelBtn = document.getElementById("duelCancel");
+  if (cancelBtn) cancelBtn.addEventListener("click", closeDuelModal);
+  const modal = document.getElementById("duelModal");
+  if (modal) modal.addEventListener("click", (e) => { if (e.target === modal) closeDuelModal(); });
+  const durRow = document.getElementById("duelDurRow");
+  if (durRow) durRow.addEventListener("click", (e) => {
+    const b = e.target.closest(".duel-dur");
+    if (!b) return;
+    duelModalDays = parseInt(b.dataset.days, 10) || 7;
+    durRow.querySelectorAll(".duel-dur").forEach((x) => x.classList.toggle("active", x === b));
+  });
+})();
 document.querySelectorAll(".fr-bt").forEach((b) => b.addEventListener("click", () => {
   frBoardMode = b.dataset.board; loadBoard();
 }));
