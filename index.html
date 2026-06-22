@@ -233,6 +233,7 @@
         <button class="btn" id="peSave" type="button">Save Profile</button>
         <span class="pe-saved hidden" id="peSaved">Saved ✓</span>
 
+        <button class="pe-accountlink" data-go="history" type="button">📜 Workout History</button>
         <button class="pe-accountlink" data-go="account-page" type="button">☁️ Account &amp; sync settings</button>
       </div>
     </section>
@@ -438,6 +439,7 @@
 
     <!-- ROUTINES -->
     <section id="routines" class="panel">
+      <button class="backlink" data-go="log" type="button">← Log</button>
       <h2 class="section-title">Routines</h2>
       <p class="hint">Build a reusable template, then start a workout pre-loaded with its exercises.</p>
       <button class="btn" id="routineNewBtn">＋ New Routine</button>
@@ -447,6 +449,8 @@
     <!-- LOG / WORKOUT -->
     <section id="log" class="panel">
       <h2 class="section-title">Workout</h2>
+
+      <button class="btn ghost" data-go="routines" type="button">📋 Routines</button>
 
       <div class="profilebar">
         <label id="bwLbl">Your bodyweight (lbs)
@@ -489,6 +493,7 @@
 
     <!-- HISTORY -->
     <section id="history" class="panel">
+      <button class="backlink" data-go="profile-page" type="button">← Profile</button>
       <h2 class="section-title">History</h2>
       <div id="historyStreak" class="streakbanner"></div>
       <h3 class="sub">Personal Records</h3>
@@ -526,18 +531,17 @@
     </section>
 
     <footer class="footer">
-      Reptilift v9.29 — rough cut
+      Reptilift v9.30 — rough cut
       <button id="replayIntro" class="replay">↻ replay intro</button>
     </footer>
 
     <nav class="tabbar" aria-label="Main navigation">
       <button class="tab active" data-tab="home"><span class="tab-ico">🦎</span><span class="tab-lbl">Menu</span></button>
       <button class="tab" data-tab="ranks"><span class="tab-ico">🏆</span><span class="tab-lbl">Ranks</span></button>
-      <button class="tab" data-tab="routines"><span class="tab-ico">📋</span><span class="tab-lbl">Routines</span></button>
       <button class="tab" data-tab="log"><span class="tab-ico">🏋️</span><span class="tab-lbl">Log</span></button>
       <button class="tab" data-tab="quests"><span class="tab-ico">🎯</span><span class="tab-lbl">Quests</span></button>
       <button class="tab" data-tab="shop"><span class="tab-ico">🛒</span><span class="tab-lbl">Shop</span></button>
-      <button class="tab" data-tab="history"><span class="tab-ico">📜</span><span class="tab-lbl">History</span></button>
+      <button class="tab" data-tab="profile-page"><span class="tab-ico">👤</span><span class="tab-lbl">Profile</span></button>
     </nav>
   </div>
 
