@@ -1,4 +1,8 @@
-// Reptilift v3.27 — earn your beast rank per exercise from your MMR.
+// Reptilift v3.28 — earn your beast rank per exercise from your MMR.
+// v3.28 makes ACHIEVEMENTS tiered: each badge levels up through escalating thresholds
+// with fun names (e.g. lifetime volume One Ton → Rhino → … → Blue Whale → Space Shuttle).
+// reptilift_achievements stores { levels: {id: highestLevelReached}, dates: {id: date} };
+// legacy { earned: {id: date} } is migrated to level 1 of the matching tiered badge.
 // v3.27 adds a KG / LB units toggle (Profile edit form). ALL stored data stays in
 // POUNDS (canonical: sets/bests/profile.bodyweight/lastsets/MMR standards/plate bar
 // weights) — units only affect DISPLAY + INPUT via toDisplayWeight/fromInputWeight/
@@ -368,12 +372,40 @@ if (!quests.lifetime || typeof quests.lifetime !== "object") quests.lifetime = {
 if (!quests.daily || typeof quests.daily !== "object") quests.daily = {};
 if (!Array.isArray(streakx.bridges)) streakx.bridges = [];
 
-// ===== achievements state (permanent one-time badges) =====
-// reptilift_achievements: { earned: { <id>: ISOdateString } }. Once an id is in
-// `earned` it stays forever (never un-earned even if stats later drop). In SYNC_KEYS.
+// ===== achievements state (permanent TIERED badges) =====
+// reptilift_achievements: { levels: { <id>: highestLevelIndexReached (1-based) },
+//   dates: { <id>: ISOdateString of latest level-up } }. The highest level reached
+// per achievement never drops even if stats later fall. In SYNC_KEYS.
+// LEGACY: older saves used { earned: { <id>: date } } (binary one-time badges).
+// We keep `earned` around and treat any earned old id as having reached level 1 of
+// its tiered successor so existing users don't lose progress / hit errors.
 // Shape is normalized defensively with plain guards (no helper calls at load time).
-let achievements = safeParse("reptilift_achievements", { earned: {} });
-if (!achievements.earned || typeof achievements.earned !== "object") achievements.earned = {};
+let achievements = safeParse("reptilift_achievements", { levels: {}, dates: {} });
+if (!achievements.levels || typeof achievements.levels !== "object") achievements.levels = {};
+if (!achievements.dates || typeof achievements.dates !== "object") achievements.dates = {};
+// migrate legacy `earned` map → at least level 1 on the matching tiered achievement.
+// ID renames from the old binary catalog map to the new tiered ids below.
+if (achievements.earned && typeof achievements.earned === "object") {
+  const LEGACY_TO_TIER = {
+    a_firstrep: "a_workouts", a_veteran: "a_workouts",
+    a_century: "a_sets", a_500sets: "a_sets",
+    a_week: "a_streak", a_unbreak: "a_streak",
+    a_climbing: "a_rankups",
+    a_oneton: "a_volume",
+    a_highroller: "a_scales",
+    a_hatchling: "a_hatchling", a_bigthree: "a_bigthree", a_jack: "a_jack",
+    a_apexlift: "a_apexlift", a_balanced: "a_balanced", a_apexbeast: "a_apexbeast",
+    a_quests: "a_quests", a_collector: "a_collector",
+  };
+  for (const oldId in achievements.earned) {
+    const tierId = LEGACY_TO_TIER[oldId] || oldId;
+    if (!(achievements.levels[tierId] >= 1)) {
+      achievements.levels[tierId] = 1;
+      if (!achievements.dates[tierId]) achievements.dates[tierId] = achievements.earned[oldId];
+    }
+  }
+  delete achievements.earned;   // fully migrated; drop the legacy map
+}
 function saveAchievements() { localStorage.setItem("reptilift_achievements", JSON.stringify(achievements)); }
 
 function saveEconomy() {
@@ -2041,13 +2073,15 @@ function renderHomeQuests() {
   box.querySelectorAll("[data-claim]").forEach((b) => b.addEventListener("click", () => claimQuest(b.dataset.claim)));
 }
 
-// ===== achievements (permanent milestone badges) =====
-// A static catalog of one-time badges. Each: id, name, desc, icon, and a pure
-// check(ctx) predicate over a snapshot of game state (achievementCtx()). Earned
-// state lives in `achievements.earned` (reptilift_achievements, in SYNC_KEYS);
-// once earned, always earned. checkAchievements() runs at the moments state
-// changes (init, set complete, finish, quest claim, coin earn) and toasts the
-// newly-unlocked ones. Checks are read-only and guarded so they never throw.
+// ===== achievements (permanent TIERED badges) =====
+// A static catalog. Each achievement is EITHER:
+//   • TIERED — `metric(ctx)` returns a number and `levels[]` is an ordered ladder of
+//     { t: threshold, name: funName, icon }. The highest level whose threshold the
+//     metric meets is "reached". Reaching a NEW level fires a level-up toast.
+//   • SINGLE — a binary milestone with `check(ctx)`; modeled as a one-level ladder.
+// Reached level per id lives in `achievements.levels` (reptilift_achievements, in
+// SYNC_KEYS); it only ever goes up. checkAchievements() runs at the moments state
+// changes (init, set complete, finish, quest claim, coin earn). Read-only & guarded.
 const MUSCLE_GROUPS = ["Chest", "Back", "Shoulders", "Legs", "Arms", "Core"];
 const APEX_OVERALL_TIER = tierOf("rhino");   // "Perfectly Balanced": Raging Rhino+ overall
 
@@ -2065,15 +2099,35 @@ function achievementCtx() {
     if (b) { ranked[id] = true; topLiftTier = Math.max(topLiftTier, tierOf(b.id)); }
   }
   const ob = overallBeast();
-  // biggest single-workout volume ever (Σ load×reps per finished session)
-  let bestWorkoutVolume = 0;
-  const vol = volumeSeries();   // [{label,value}] one entry per day with volume
-  vol.forEach((p) => { if (p.value > bestWorkoutVolume) bestWorkoutVolume = p.value; });
+  // LIFETIME cumulative volume = Σ (load × reps) across ALL sets ever. Same source
+  // volumeSeries uses (frozen set load+reps, with the legacy `detail` parse fallback),
+  // but summed across all of history instead of grouped by day.
+  const bw = profile.bodyweight || 0;
+  let lifetimeVolume = 0;
+  (sets || []).forEach((s) => {
+    let load, reps;
+    if (typeof s.load === "number" && typeof s.reps === "number") {
+      load = s.load; reps = s.reps;
+    } else {
+      const ex = exById(s.exId);
+      const repsM = /×\s*(\d+)/.exec(s.detail || "");
+      reps = repsM ? parseInt(repsM[1], 10) : 0;
+      if (ex && ex.type === "bodyweight") {
+        const addM = /\+\s*(\d+)/.exec(s.detail || "");
+        load = bw * ex.factor + (addM ? parseInt(addM[1], 10) : 0);
+      } else {
+        const wM = /(\d+)/.exec(s.detail || "");
+        load = wM ? parseInt(wM[1], 10) : 0;
+      }
+    }
+    if (load > 0 && reps > 0) lifetimeVolume += load * reps;
+  });
   return {
     sets, workouts, ranked, groupsTrained, topLiftTier,
     overallTier: ob ? tierOf(ob.id) : 0,
-    streak: computeStreak(),
-    bestWorkoutVolume,
+    hasOverall: !!ob,
+    streak: Math.max(computeStreak(), (function () { try { return longestStreak(); } catch (e) { return 0; } })()),
+    lifetimeVolume: Math.round(lifetimeVolume),
     questClaims: (quests.lifetime && quests.lifetime.claims) || 0,
     rankups: (quests.lifetime && quests.lifetime.rankups) || 0,
     coinsEarned: (quests.lifetime && quests.lifetime.coins) || 0,
@@ -2082,68 +2136,183 @@ function achievementCtx() {
   };
 }
 
+// helper to build a single-level (binary) achievement as a one-rung ladder.
+function single(id, icon, name, desc, check) {
+  return { id, icon, name, desc, single: true, check, levels: [{ t: 1, name, icon }] };
+}
+
 const ACHIEVEMENTS = [
-  { id: "a_firstrep",  icon: "🥚", name: "First Rep",          desc: "Finish your very first workout.",
-    check: (c) => c.workouts.length >= 1 },
-  { id: "a_hatchling", icon: "🐣", name: "Hatchling",          desc: "Earn your first rank on any lift.",
-    check: (c) => c.rankedCount >= 1 },
-  { id: "a_bigthree",  icon: "🏋️", name: "The Big Three",      desc: "Rank bench, squat AND deadlift.",
-    check: (c) => c.ranked.bench && c.ranked.squat && c.ranked.deadlift },
-  { id: "a_jack",      icon: "🧩", name: "Jacked of All Trades", desc: "Train every muscle group at least once.",
-    check: (c) => MUSCLE_GROUPS.every((g) => c.groupsTrained.has(g)) },
-  { id: "a_century",   icon: "💯", name: "Century",            desc: "Log 100 total sets.",
-    check: (c) => c.sets.length >= 100 },
-  { id: "a_500sets",   icon: "📚", name: "Set Machine",        desc: "Log 500 total sets.",
-    check: (c) => c.sets.length >= 500 },
-  { id: "a_veteran",   icon: "🎖️", name: "Iron Veteran",       desc: "Complete 50 workouts.",
-    check: (c) => c.workouts.length >= 50 },
-  { id: "a_week",      icon: "🔥", name: "Week Warrior",       desc: "Hit a 7-day streak.",
-    check: (c) => c.streak >= 7 },
-  { id: "a_unbreak",   icon: "🛡️", name: "Unbreakable",        desc: "Hit a 30-day streak.",
-    check: (c) => c.streak >= 30 },
-  { id: "a_climbing",  icon: "🧗", name: "Climbing",           desc: "Rank up 25 times in total.",
-    check: (c) => c.rankups >= 25 },
-  { id: "a_oneton",    icon: "🪨", name: "One Ton",            desc: "Move 2,000+ lb of volume in a single workout.",
-    check: (c) => c.bestWorkoutVolume >= 2000 },
-  { id: "a_apexlift",  icon: "🐙", name: "Apex Predator",      desc: "Reach Optimal Octopus on any lift.",
-    check: (c) => c.topLiftTier >= tierOf("octopus") },
-  { id: "a_balanced",  icon: "⚖️", name: "Perfectly Balanced", desc: `Reach ${byId("rhino").emoji} ${byId("rhino").name} or better overall.`,
-    check: (c) => c.overallTier >= APEX_OVERALL_TIER },
-  { id: "a_apexbeast", icon: "👑", name: "Apex Beast",         desc: "Reach Optimal Octopus OVERALL.",
-    check: (c) => c.overallTier >= tierOf("octopus") },
-  { id: "a_quests",    icon: "🎯", name: "Quest Hunter",       desc: "Claim 20 quests in total.",
-    check: (c) => c.questClaims >= 20 },
-  { id: "a_highroller",icon: "🦎", name: "High Roller",        desc: "Earn 1,000 Scales over your lifetime.",
-    check: (c) => c.coinsEarned >= 1000 },
-  { id: "a_collector", icon: "🏆", name: "Collector",          desc: "Rank 10 different lifts.",
-    check: (c) => c.rankedCount >= 10 },
+  // ---- LIFETIME VOLUME: "you've lifted the weight of a ___" ladder (real-ish lb) ----
+  { id: "a_volume", icon: "🪨", name: "Tonnage", unit: "lb",
+    desc: "Total weight moved across every set you've ever logged.",
+    metric: (c) => c.lifetimeVolume,
+    levels: [
+      { t: 2000,      icon: "🪨", name: "One Ton" },
+      { t: 5000,      icon: "🦏", name: "Rhino" },
+      { t: 8000,      icon: "🦛", name: "Hippo" },
+      { t: 13000,     icon: "🐘", name: "Elephant" },
+      { t: 18000,     icon: "🦖", name: "T-Rex" },
+      { t: 35000,     icon: "🚛", name: "Semi Truck" },
+      { t: 80000,     icon: "🏠", name: "House" },
+      { t: 90000,     icon: "✈️", name: "Boeing 737" },
+      { t: 330000,    icon: "🐋", name: "Blue Whale" },
+      { t: 450000,    icon: "🗽", name: "Statue of Liberty" },
+      { t: 900000,    icon: "🚢", name: "Cargo Ship Anchor" },
+      { t: 4400000,   icon: "🚀", name: "Space Shuttle" },
+      { t: 11000000,  icon: "🗼", name: "Eiffel Tower" },
+      { t: 100000000, icon: "🌉", name: "Golden Gate Bridge" },
+    ] },
+
+  // ---- WORKOUTS completed ----
+  { id: "a_workouts", icon: "🎖️", name: "Workouts",
+    desc: "Workouts completed.",
+    metric: (c) => c.workouts.length,
+    levels: [
+      { t: 1,   icon: "🥚", name: "First Rep" },
+      { t: 10,  icon: "🐣", name: "Getting Started" },
+      { t: 25,  icon: "💪", name: "Regular" },
+      { t: 50,  icon: "🎖️", name: "Iron Veteran" },
+      { t: 100, icon: "🏅", name: "Centurion" },
+      { t: 200, icon: "🛡️", name: "War Machine" },
+      { t: 365, icon: "📅", name: "Year of Gains" },
+      { t: 500, icon: "👑", name: "Iron Legend" },
+    ] },
+
+  // ---- SETS logged ----
+  { id: "a_sets", icon: "📚", name: "Sets Logged",
+    desc: "Total sets recorded.",
+    metric: (c) => c.sets.length,
+    levels: [
+      { t: 10,   icon: "✏️", name: "Scribbler" },
+      { t: 100,  icon: "💯", name: "Century" },
+      { t: 500,  icon: "📚", name: "Set Machine" },
+      { t: 1000, icon: "⚙️", name: "Rep Factory" },
+      { t: 2500, icon: "🏭", name: "Volume Plant" },
+      { t: 5000, icon: "♾️", name: "Endless Grinder" },
+    ] },
+
+  // ---- RANK-UPS total ----
+  { id: "a_rankups", icon: "🧗", name: "Rank-Ups",
+    desc: "Times you've ranked up in total.",
+    metric: (c) => c.rankups,
+    levels: [
+      { t: 1,   icon: "🪜", name: "First Climb" },
+      { t: 10,  icon: "🧗", name: "Climbing" },
+      { t: 25,  icon: "⛰️", name: "Ascender" },
+      { t: 50,  icon: "🏔️", name: "Summit Seeker" },
+      { t: 100, icon: "🚀", name: "Sky's the Limit" },
+    ] },
+
+  // ---- STREAK (best run, current or longest) ----
+  { id: "a_streak", icon: "🔥", name: "Streak",  unit: "days",
+    desc: "Longest run of consecutive training days.",
+    metric: (c) => c.streak,
+    levels: [
+      { t: 3,   icon: "✨", name: "Warming Up" },
+      { t: 7,   icon: "🔥", name: "Week Warrior" },
+      { t: 14,  icon: "🔥", name: "Fortnight Beast" },
+      { t: 30,  icon: "🛡️", name: "Unbreakable" },
+      { t: 60,  icon: "💎", name: "Diamond Discipline" },
+      { t: 100, icon: "🏆", name: "Triple Digits" },
+      { t: 365, icon: "👑", name: "Year-Long Reptile" },
+    ] },
+
+  // ---- SCALES earned lifetime ----
+  { id: "a_scales", icon: "🦎", name: "Scales Earned",  unit: COIN,
+    desc: "Total Scales earned over your lifetime.",
+    metric: (c) => c.coinsEarned,
+    levels: [
+      { t: 100,   icon: "🪙", name: "Pocket Change" },
+      { t: 1000,  icon: "🦎", name: "High Roller" },
+      { t: 5000,  icon: "💰", name: "Scale Baron" },
+      { t: 25000, icon: "🐲", name: "Hoard Master" },
+    ] },
+
+  // ---- QUESTS claimed ----
+  { id: "a_quests", icon: "🎯", name: "Quests Claimed",
+    desc: "Quests claimed in total.",
+    metric: (c) => c.questClaims,
+    levels: [
+      { t: 5,   icon: "🎯", name: "Quester" },
+      { t: 20,  icon: "🏹", name: "Quest Hunter" },
+      { t: 50,  icon: "🗺️", name: "Trailblazer" },
+      { t: 100, icon: "🏆", name: "Quest Master" },
+    ] },
+
+  // ---- LIFTS ranked (collection) ----
+  { id: "a_collector", icon: "🏆", name: "Collector",
+    desc: "Different lifts ranked.",
+    metric: (c) => c.rankedCount,
+    levels: [
+      { t: 1,  icon: "🐣", name: "Hatchling" },
+      { t: 5,  icon: "🧰", name: "Toolbox" },
+      { t: 10, icon: "🏆", name: "Collector" },
+      { t: 20, icon: "📦", name: "Completionist" },
+    ] },
+
+  // ---- OVERALL beast rank ladder (Chud → Octopus) ----
+  { id: "a_overall", icon: "🦎", name: "Apex Climb",
+    desc: "Your highest overall beast rank.",
+    metric: (c) => c.hasOverall ? c.overallTier + 1 : 0,   // tierOf is 0-based; +1 so level 1 = first beast
+    levels: BEASTS.map((b) => ({ t: tierOf(b.id) + 1, icon: b.emoji, name: b.name })) },
+
+  // ---- SINGLE-LEVEL milestones (don't naturally tier) ----
+  single("a_bigthree", "🏋️", "The Big Three", "Rank bench, squat AND deadlift.",
+    (c) => c.ranked.bench && c.ranked.squat && c.ranked.deadlift),
+  single("a_jack", "🧩", "Jacked of All Trades", "Train every muscle group at least once.",
+    (c) => MUSCLE_GROUPS.every((g) => c.groupsTrained.has(g))),
+  single("a_apexlift", "🐙", "Apex Predator", "Reach Optimal Octopus on any lift.",
+    (c) => c.topLiftTier >= tierOf("octopus")),
+  single("a_balanced", "⚖️", "Perfectly Balanced", `Reach ${byId("rhino").emoji} ${byId("rhino").name} or better overall.`,
+    (c) => c.overallTier >= APEX_OVERALL_TIER),
 ];
 
-// Evaluate every un-earned achievement against current state; stamp newly-earned
-// ones with today's date and toast them. Cheap, fully guarded — never throws and
-// never blocks the caller. Returns the list of newly-earned achievement objects.
+// highest level reached for a tiered achievement given its metric value (1-based;
+// 0 = none reached). Levels are strictly ascending by threshold `t`.
+function levelForMetric(a, value) {
+  let lvl = 0;
+  for (let i = 0; i < a.levels.length; i++) { if (value >= a.levels[i].t) lvl = i + 1; }
+  return lvl;
+}
+// current reached level (clamped to catalog length so a shrunk ladder can't error).
+function achLevel(a) {
+  const n = Math.max(0, achievements.levels[a.id] | 0);
+  return Math.min(n, a.levels.length);
+}
+
+// Evaluate every achievement against current state. For each, find the highest level
+// whose threshold is met; if higher than the stored level, record it + queue a
+// level-up toast describing the jump. Cheap, fully guarded — never throws / blocks.
+// Returns a list of { ach, from, to } level-up events.
 function checkAchievements() {
   try {
     const ctx = achievementCtx();
-    const fresh = [];
+    const events = [];
     ACHIEVEMENTS.forEach((a) => {
-      if (achievements.earned[a.id]) return;            // already earned — leave it
-      let got = false;
-      try { got = !!a.check(ctx); } catch (e) { got = false; }
-      if (got) { achievements.earned[a.id] = todayStr(); fresh.push(a); }
+      let value = 0;
+      try { value = a.single ? (a.check(ctx) ? 1 : 0) : (Number(a.metric(ctx)) || 0); }
+      catch (e) { value = 0; }
+      const reached = a.single ? (value ? 1 : 0) : levelForMetric(a, value);
+      const have = achLevel(a);
+      if (reached > have) {
+        achievements.levels[a.id] = reached;
+        achievements.dates[a.id] = todayStr();
+        events.push({ ach: a, from: have, to: reached });
+      }
     });
-    if (fresh.length) {
+    if (events.length) {
       saveAchievements();
-      queueAchievementToast(fresh);
+      queueAchievementToast(events);
     }
-    return fresh;
+    return events;
   } catch (e) { return []; }
 }
 
-// ---- unlock toast (light celebratory popup, NOT the big rank-up animation) ----
+// ---- level-up toast (light celebratory popup, NOT the big rank-up animation) ----
 // A small badge popup appears bottom-center for ~2.4s, dismissible by tap. Multiple
-// simultaneous unlocks are combined into one toast (with a count). Queued so a burst
-// (e.g. a workout finish) shows one at a time without stacking.
+// simultaneous level-ups are combined into one toast (with a +N count). Queued so a
+// burst (e.g. a workout finish) shows one at a time without stacking. Each queued
+// item is a { ach, from, to } level-up event (from checkAchievements).
 let achToastQueue = [];
 let achToastShowing = false;
 function queueAchievementToast(list) {
@@ -2164,11 +2333,22 @@ function showNextAchievementToast() {
   }
   const head = group[0];
   const more = group.length - 1;
+  const a = head.ach, lvl = head.to;
+  const cur = a.levels[lvl - 1] || { name: a.name, icon: a.icon };
+  const prev = head.from > 0 ? (a.levels[head.from - 1] || null) : null;
+  const isFirst = head.from === 0;
+  // single-level achievements toast as a plain "unlocked"; tiered show the level jump.
+  const tag = a.single ? "🏅 Achievement unlocked"
+            : isFirst   ? `🏅 ${escapeHtml(a.name)} unlocked`
+            :             `🏅 ${escapeHtml(a.name)} · Lv ${lvl}`;
+  const nameLine = (!a.single && prev)
+    ? `${escapeHtml(prev.name)} → ${escapeHtml(cur.name)}`
+    : escapeHtml(cur.name);
   el.innerHTML = `
-    <span class="at-ic">${head.icon}</span>
+    <span class="at-ic">${cur.icon}</span>
     <span class="at-main">
-      <span class="at-tag">🏅 Achievement unlocked</span>
-      <span class="at-name">${escapeHtml(head.name)}${more > 0 ? ` <small>+${more} more</small>` : ""}</span>
+      <span class="at-tag">${tag}</span>
+      <span class="at-name">${nameLine}${more > 0 ? ` <small>+${more} more</small>` : ""}</span>
     </span>`;
   // restart the entrance animation cleanly even on back-to-back toasts
   el.classList.remove("show");
@@ -2188,50 +2368,99 @@ function showNextAchievementToast() {
 }
 
 // ---- achievements display (Profile preview + dedicated page) ----
-function earnedCount() { return ACHIEVEMENTS.filter((a) => achievements.earned[a.id]).length; }
+// total LEVELS earned across the whole catalog (the headline progress number).
+function totalLevels() { return ACHIEVEMENTS.reduce((n, a) => n + a.levels.length, 0); }
+function earnedLevels() { return ACHIEVEMENTS.reduce((n, a) => n + achLevel(a), 0); }
+// achievements with at least one level reached (used for the profile "badges" count).
+function startedCount() { return ACHIEVEMENTS.filter((a) => achLevel(a) > 0).length; }
+const fmtN = (n) => (Number(n) || 0).toLocaleString();
 
-// one badge tile (earned = full color, locked = dimmed). Earned tiles expose the
-// date earned via title (tap/hover). Locked tiles still show name + desc to chase.
-function achTileHtml(a) {
-  const date = achievements.earned[a.id];
-  const earned = !!date;
-  const when = earned ? `Earned ${prettyDate(date)}` : "Locked";
-  return `<div class="achtile ${earned ? "earned" : "locked"}" title="${escapeHtml(when)}">
-    <span class="ach-ic">${a.icon}</span>
-    <span class="ach-name">${escapeHtml(a.name)}</span>
+// per-achievement view-model: current level info, next target, progress fraction.
+// Pass a shared ctx (from one achievementCtx() per render pass) to avoid re-scanning
+// all sets for every tile.
+function achView(a, ctx) {
+  const max = a.levels.length;
+  const lvl = achLevel(a);                       // 0..max
+  const reached = lvl > 0 ? a.levels[lvl - 1] : null;
+  const next = lvl < max ? a.levels[lvl] : null; // null when MAXed
+  if (!ctx) ctx = (() => { try { return achievementCtx(); } catch (e) { return null; } })();
+  let value = 0;
+  try { value = ctx ? (a.single ? (a.check(ctx) ? 1 : 0) : (Number(a.metric(ctx)) || 0)) : 0; } catch (e) { value = 0; }
+  // progress toward `next` measured from the previous threshold (0 for first level).
+  let frac = lvl === 0 ? (next ? Math.min(1, value / next.t) : 0) : (next ? 0 : 1);
+  if (next) {
+    const base = lvl > 0 ? a.levels[lvl - 1].t : 0;
+    frac = Math.max(0, Math.min(1, (value - base) / (next.t - base)));
+  }
+  return { max, lvl, reached, next, value, frac, maxed: lvl >= max && max > 0, single: !!a.single };
+}
+
+// one tiered card: current level name+icon+"Lv N", progress bar to next w/ next name
+// + remaining amount, or a MAX banner. Locked (lvl 0) shows the first target to chase.
+function achTileHtml(a, ctx) {
+  const v = achView(a, ctx);
+  const date = achievements.dates[a.id];
+  const cur = v.reached || a.levels[0];
+  const dim = v.lvl === 0;
+  const unit = a.unit ? ` ${a.unit}` : "";
+  let footer;
+  if (v.single) {
+    footer = v.lvl > 0
+      ? `<span class="ach-when done">${date ? "Earned " + escapeHtml(prettyDate(date)) : "Unlocked"}</span>`
+      : `<span class="ach-when">🔒 Locked</span>`;
+  } else if (v.maxed) {
+    footer = `<span class="ach-bar maxed"><i style="width:100%"></i></span>
+      <span class="ach-next">⭐ MAX · ${escapeHtml(cur.name)}</span>`;
+  } else {
+    const remaining = Math.max(0, v.next.t - v.value);
+    footer = `<span class="ach-bar"><i style="width:${Math.round(v.frac * 100)}%"></i></span>
+      <span class="ach-next">${v.next.icon} ${escapeHtml(v.next.name)} · ${fmtN(remaining)}${unit} to go</span>`;
+  }
+  const lvlBadge = v.single
+    ? ""
+    : `<span class="ach-lv">${v.lvl > 0 ? "Lv " + v.lvl : "Lv 0"}</span>`;
+  const title = v.single ? a.name : `${a.name} — ${v.lvl > 0 ? cur.name : "Locked"}`;
+  return `<div class="achtile ${dim ? "locked" : "earned"} ${v.maxed ? "maxed" : ""}" title="${escapeHtml(title)}">
+    ${lvlBadge}
+    <span class="ach-ic">${v.lvl > 0 ? cur.icon : (a.levels[0].icon || a.icon)}</span>
+    <span class="ach-name">${escapeHtml(v.lvl > 0 ? cur.name : a.name)}</span>
     <span class="ach-desc">${escapeHtml(a.desc)}</span>
-    <span class="ach-when">${earned ? escapeHtml(when) : "🔒 Locked"}</span>
+    ${footer}
   </div>`;
 }
 
-// full grid on the dedicated #achievements-page (earned first, then locked).
+// full grid on the dedicated #achievements-page (in-progress/maxed first, then locked).
 function renderAchievements() {
   const grid = document.getElementById("achGrid");
   if (!grid) return;
   const count = document.getElementById("achCount");
-  if (count) count.textContent = `${earnedCount()} / ${ACHIEVEMENTS.length} unlocked`;
-  const earned = ACHIEVEMENTS.filter((a) => achievements.earned[a.id]);
-  const locked = ACHIEVEMENTS.filter((a) => !achievements.earned[a.id]);
-  grid.innerHTML = [...earned, ...locked].map(achTileHtml).join("");
+  if (count) count.textContent = `${earnedLevels()} / ${totalLevels()} levels`;
+  const started = ACHIEVEMENTS.filter((a) => achLevel(a) > 0);
+  const locked = ACHIEVEMENTS.filter((a) => achLevel(a) === 0);
+  let ctx = null; try { ctx = achievementCtx(); } catch (e) {}
+  grid.innerHTML = [...started, ...locked].map((a) => achTileHtml(a, ctx)).join("");
 }
 
-// compact preview on the Profile page: count + the first few earned badges (or the
-// next ones to chase if none earned yet). Tapping opens the full page.
+// compact preview on the Profile page: total levels earned + the current icons of a
+// few top achievements (most levels reached first). Tapping opens the full page.
 function renderProfileAchievements() {
   const box = document.getElementById("profileAch");
   if (!box) return;
-  const got = earnedCount();
-  const earned = ACHIEVEMENTS.filter((a) => achievements.earned[a.id]);
-  const preview = (earned.length ? earned : ACHIEVEMENTS).slice(0, 4);
+  const lvls = earnedLevels(), tot = totalLevels();
+  // rank by levels reached desc; show the ones with progress, else the first chasers.
+  const ranked = ACHIEVEMENTS.slice().sort((a, b) => achLevel(b) - achLevel(a));
+  const preview = ranked.slice(0, 5);
   box.innerHTML = `
     <button class="pa-head" data-go="achievements-page" type="button">
       <span class="pa-title">🏅 Achievements</span>
-      <span class="pa-count">${got} / ${ACHIEVEMENTS.length}</span>
+      <span class="pa-count">${lvls} / ${tot} lvls</span>
       <span class="pl-arrow">›</span>
     </button>
     <div class="pa-row">${preview.map((a) => {
-      const isEarned = !!achievements.earned[a.id];
-      return `<span class="pa-badge ${isEarned ? "earned" : "locked"}" title="${escapeHtml(a.name)}">${a.icon}</span>`;
+      const lvl = achLevel(a);
+      const cur = lvl > 0 ? a.levels[lvl - 1] : a.levels[0];
+      const badge = (!a.single && lvl > 0) ? `<small>${lvl}</small>` : "";
+      return `<span class="pa-badge ${lvl > 0 ? "earned" : "locked"}" title="${escapeHtml(a.name)}">${cur.icon}${badge}</span>`;
     }).join("")}</div>`;
   const head = box.querySelector(".pa-head");
   if (head) head.addEventListener("click", () => switchTab("achievements-page"));
