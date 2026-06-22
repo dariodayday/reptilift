@@ -1,4 +1,4 @@
-// Reptilift v3.18 — earn your beast rank per exercise from your MMR.
+// Reptilift v3.19 — earn your beast rank per exercise from your MMR.
 // v3.16 adds a first-run ONBOARDING wizard (#onboard). Shown ONCE to brand-new
 // users after the intro finishes — detected as NOT profile.onboarded AND no real
 // data (no bodyweight, no sets, no workouts). Existing users are implicitly flagged
@@ -2875,12 +2875,19 @@ function obCommitStep() {
 function maybeShowOnboarding() {
   const ov = document.getElementById("onboard");
   if (!ov) return;
+  // When cloud is configured, the user MUST be logged in first — the auth gate is
+  // what a logged-out user sees after the intro, NOT the onboarding wizard. So never
+  // render onboarding behind the gate. (onLogin re-invokes this for brand-new users.)
+  if (typeof CLOUD_CONFIGURED !== "undefined" && CLOUD_CONFIGURED && !cloudUser) return;
   // Existing users (any real data) → flag them so it never shows, and bail.
   if (userHasData() && !profile.onboarded) { markOnboarded(); return; }
   if (profile.onboarded || userHasData()) return;
 
-  // drop the cloud step gracefully when Supabase isn't configured
-  obActiveSteps = OB_STEPS.filter((s) => s !== "cloud" || (typeof CLOUD_CONFIGURED !== "undefined" && CLOUD_CONFIGURED));
+  // Drop the cloud step when Supabase isn't configured OR the user is already
+  // logged in (they just signed up at the gate, so the "save your progress?" pitch
+  // is moot). It only survives for the local-only / not-yet-signed-in path.
+  const cloudConf = typeof CLOUD_CONFIGURED !== "undefined" && CLOUD_CONFIGURED;
+  obActiveSteps = OB_STEPS.filter((s) => s !== "cloud" || (cloudConf && !cloudUser));
   obIndex = 0;
 
   // prefill from anything already in the profile
@@ -3057,6 +3064,65 @@ const ax = {
   chipLbl:     document.getElementById("acctChipLbl"),
 };
 
+// ---- blocking auth-gate element handles + state (all optional-guarded) ----
+const gate = {
+  el:     document.getElementById("authGate"),
+  form:   document.getElementById("agForm"),
+  email:  document.getElementById("agEmail"),
+  pass:   document.getElementById("agPass"),
+  err:    document.getElementById("agErr"),
+  submit: document.getElementById("agSubmit"),
+  toggle: document.getElementById("agToggle"),
+};
+let gateMode = "signup";   // "signup" | "signin" — the gate opens on Sign up
+
+// Show/hide the full-screen auth wall. Called only from auth callbacks / bootCloud
+// / the init block — never from a top-level data-loading statement (load-order safe).
+function showAuthGate() {
+  if (!gate.el) return;
+  gate.el.classList.remove("hidden");
+  gate.el.setAttribute("aria-hidden", "false");
+}
+function hideAuthGate() {
+  if (!gate.el) return;
+  gate.el.classList.add("hidden");
+  gate.el.setAttribute("aria-hidden", "true");
+}
+// Single source of truth for the gate's visibility: show iff cloud is configured
+// AND nobody is logged in. When cloud isn't configured the gate NEVER shows (app
+// stays usable locally). Safe to call repeatedly.
+function refreshAuthGate() {
+  if (typeof CLOUD_CONFIGURED !== "undefined" && CLOUD_CONFIGURED && !cloudUser) showAuthGate();
+  else hideAuthGate();
+}
+function paintGateMode() {
+  const signup = gateMode === "signup";
+  if (gate.submit) gate.submit.textContent = signup ? "Sign up" : "Log in";
+  if (gate.pass) gate.pass.autocomplete = signup ? "new-password" : "current-password";
+  if (gate.toggle) gate.toggle.innerHTML = signup
+    ? "Already have an account? <b>Log in</b>"
+    : "Need an account? <b>Sign up</b>";
+  if (gate.err) { gate.err.classList.remove("ok"); gate.err.textContent = ""; }
+}
+if (gate.toggle) gate.toggle.addEventListener("click", () => {
+  gateMode = gateMode === "signup" ? "signin" : "signup";
+  paintGateMode();
+});
+if (gate.form) gate.form.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const email = (gate.email.value || "").trim();
+  const password = gate.pass.value || "";
+  await doAuth(email, password, gateMode, { err: gate.err, submit: gate.submit });
+  // On success onAuthStateChange → onLogin hides the gate. For signup-with-confirm,
+  // flip to the log-in view but keep the "check your email" notice.
+  if (gateMode === "signup" && supa && !cloudUser && gate.err && gate.err.classList.contains("ok")) {
+    gateMode = "signin";
+    if (gate.submit) gate.submit.textContent = "Log in";
+    if (gate.pass) gate.pass.autocomplete = "current-password";
+    if (gate.toggle) gate.toggle.innerHTML = "Need an account? <b>Sign up</b>";
+  }
+});
+
 // ---- sync status indicator (dot + labels) ----
 // state: "off" | "synced" | "saving" | "offline"
 function setSyncStatus(state) {
@@ -3134,6 +3200,7 @@ function applyCloud(data) {
 // ---- onLogin(user): fetch the row and reconcile cloud vs local ----
 async function onLogin(user) {
   cloudUser = user;
+  hideAuthGate();                            // logged in → drop the blocking wall
   paintAccount();
   // Friends/leaderboard: repaint the page for the signed-in state and publish the
   // public profile once a username is known. Guarded so a missing module/offline
@@ -3157,6 +3224,10 @@ async function onLogin(user) {
     if (!cloudHasData) {
       // New account / no cloud save yet → adopt this device's local data.
       await pushCloud();
+      // Brand-new user with an empty device (a true first signup) → run the
+      // onboarding wizard now that the gate is down. Existing local data means a
+      // returning user adopting cloud, so we skip it. Guarded + load-order safe.
+      if (!localHasData()) { try { maybeShowOnboarding(); } catch (e) {} }
       return;
     }
     // Cloud has a save. Decide whether to load it (new device) or keep local.
@@ -3179,6 +3250,9 @@ function onLogout() {
   cloudUser = null;
   clearTimeout(pushTimer); pushTimer = null;
   cloudMode = "signin";
+  gateMode = "signin";                       // a returning user lands on Log in
+  paintGateMode();
+  refreshAuthGate();                         // cloud configured + logged out → wall returns
   paintAccount();                            // local data stays on the device untouched
   try { if (typeof onCloudAuthChanged === "function") onCloudAuthChanged(); } catch (e) {}
 }
@@ -3228,37 +3302,51 @@ if (ax.toggle) ax.toggle.addEventListener("click", () => {
   paintMode();
 });
 
-if (ax.form) ax.form.addEventListener("submit", async (e) => {
-  e.preventDefault();
+// ---- doAuth(): the ONE supabase auth handler shared by BOTH the Account-page
+// form and the blocking #authGate form (kept DRY). ui = { err, submit } element
+// handles for the form that triggered it; signupNeedsConfirm is the message shown
+// when email confirmation is on. Returns nothing — onAuthStateChange drives onLogin.
+async function doAuth(email, password, mode, ui) {
   if (!supa) return;
-  const email = (ax.email.value || "").trim();
-  const password = ax.pass.value || "";
-  if (ax.err) ax.err.textContent = "";
-  if (ax.submit) { ax.submit.disabled = true; ax.submit.textContent = "…"; }
+  const err = ui && ui.err, submit = ui && ui.submit;
+  if (err) { err.classList.remove("ok"); err.textContent = ""; }
+  if (submit) { submit.disabled = true; submit.dataset.lbl = submit.textContent; submit.textContent = "…"; }
   try {
-    if (cloudMode === "signup") {
+    if (mode === "signup") {
       const { data, error } = await supa.auth.signUp({ email, password });
       if (error) throw error;
       if (data && data.session) {
-        // confirmation OFF → active session returned; auth listener runs onLogin.
-      } else {
+        // confirmation OFF → active session returned; auth listener runs onLogin → hides gate.
+      } else if (err) {
         // confirmation ON → no session yet; user must confirm via email first.
-        cloudMode = "signin"; paintMode();   // switch back to log-in view first…
-        if (ax.err) {                         // …then show the message (paintMode clears it)
-          ax.err.classList.add("ok");
-          ax.err.textContent = "Check your email to confirm, then log in.";
-        }
+        err.classList.add("ok");
+        err.textContent = "Check your email to confirm, then log in.";
       }
     } else {
       const { error } = await supa.auth.signInWithPassword({ email, password });
       if (error) throw error;
       // auth listener fires onLogin on success.
     }
-  } catch (err) {
-    if (ax.err) { ax.err.classList.remove("ok"); ax.err.textContent = (err && err.message) || "Something went wrong."; }
+  } catch (e2) {
+    if (err) { err.classList.remove("ok"); err.textContent = (e2 && e2.message) || "Something went wrong."; }
   } finally {
-    // restore the submit button label/state WITHOUT clearing any message we set above.
-    if (ax.submit) { ax.submit.disabled = false; ax.submit.textContent = cloudMode === "signup" ? "Sign up" : "Log in"; }
+    if (submit) { submit.disabled = false; submit.textContent = submit.dataset.lbl || "Submit"; }
+  }
+}
+
+if (ax.form) ax.form.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const email = (ax.email.value || "").trim();
+  const password = ax.pass.value || "";
+  const prevMode = cloudMode;
+  await doAuth(email, password, cloudMode, { err: ax.err, submit: ax.submit });
+  // signup-with-confirmation: flip the Account form back to the log-in view, but
+  // preserve the "check your email" message doAuth just set.
+  if (prevMode === "signup" && supa && !cloudUser && ax.err && ax.err.classList.contains("ok")) {
+    cloudMode = "signin";
+    if (ax.submit) ax.submit.textContent = "Log in";
+    if (ax.pass) ax.pass.autocomplete = "current-password";
+    if (ax.toggle) ax.toggle.innerHTML = "Need an account? <b>Sign up</b>";
   }
 });
 
@@ -3298,11 +3386,20 @@ window.addEventListener("online", () => { if (cloudUser) scheduleCloudPush(); })
     }
   });
 
-  // Also resolve any existing session on first load (covers cold start).
+  // Also resolve any existing session on first load (covers cold start). The gate
+  // starts HIDDEN in markup, so a logged-in user never flashes it: we only reveal
+  // it here, AFTER the session check confirms nobody is logged in. (If a session
+  // exists, onLogin already ran via getSession/onAuthStateChange and keeps it hidden.)
   supa.auth.getSession().then(({ data }) => {
     const s = data && data.session;
     if (s && s.user && !cloudUser) onLogin(s.user);
-  }).catch(() => {});
+    if (!cloudUser) { gateMode = "signup"; paintGateMode(); refreshAuthGate(); }
+  }).catch(() => {
+    // session probe failed (offline cold start with no cached session): show the
+    // gate so the app can't be used unauthenticated. A cached session, if any,
+    // would have surfaced through onAuthStateChange and kept us logged in.
+    if (!cloudUser) refreshAuthGate();
+  });
 })();
 
 // ============================================================================

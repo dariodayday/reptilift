@@ -13,7 +13,7 @@
 
 /* ===== startup animation: eyes glow in the dark, logo wipes in around them ===== */
 .intro {
-  position: fixed; inset: 0; z-index: 100;
+  position: fixed; inset: 0; z-index: 6000;          /* above the auth gate so the intro always plays uninterrupted on top */
   display: flex; align-items: center; justify-content: center;
   background: #000;
   transition: opacity .8s ease;
@@ -549,6 +549,52 @@ body {
 .ob-back { flex: 0 0 auto; width: auto; padding-left: 18px; padding-right: 18px; }
 .ob-next { flex: 1; }
 .ob-back.hidden { display: none; }
+
+/* ===== blocking auth gate: full-screen welcome / sign-in wall ===== */
+.authgate {
+  position: fixed; inset: 0; z-index: 5000;          /* above tab bar, modals & onboarding */
+  display: flex; align-items: center; justify-content: center; padding: 24px;
+  background:
+    radial-gradient(620px 440px at 50% -10%, color-mix(in srgb, var(--gold) 14%, #000), transparent 70%),
+    radial-gradient(500px 400px at 50% 110%, color-mix(in srgb, var(--accent) 16%, #000), transparent 70%),
+    #05100b;
+  animation: fade .4s ease;
+  overflow: auto;
+}
+.authgate.hidden { display: none; }
+.ag-card {
+  width: min(92vw, 400px); text-align: center;
+  background: linear-gradient(180deg, var(--card2), var(--card));
+  border: 1px solid color-mix(in srgb, var(--gold) 30%, var(--line));
+  border-radius: 22px; padding: 34px 26px 26px;
+  box-shadow: 0 28px 80px rgba(0,0,0,.7), 0 0 0 1px rgba(0,0,0,.3);
+}
+.ag-logo {
+  width: 96px; height: 96px; object-fit: contain; margin: 0 auto 6px;
+  filter: drop-shadow(0 0 22px color-mix(in srgb, var(--gold) 45%, transparent));
+}
+.ag-title {
+  font-size: 30px; font-weight: 900; letter-spacing: 3px; color: var(--gold);
+  text-shadow: 0 0 22px color-mix(in srgb, var(--gold) 40%, transparent); margin-bottom: 8px;
+}
+.ag-sub { font-size: 14px; color: var(--muted); line-height: 1.5; margin: 0 auto 22px; max-width: 320px; }
+.ag-form { display: flex; flex-direction: column; gap: 11px; text-align: left; }
+.ag-form input {
+  width: 100%; background: var(--bg); border: 1px solid var(--line); border-radius: 11px;
+  padding: 14px 13px; color: var(--text); font: inherit; font-size: 16px;
+  -webkit-appearance: none; appearance: none;
+}
+.ag-form input:focus { outline: none; border-color: color-mix(in srgb, var(--gold) 60%, transparent); }
+.ag-err { color: #ff8a7a; font-size: 13px; font-weight: 600; min-height: 0; }
+.ag-err:empty { display: none; }
+.ag-err.ok { color: var(--gold); }
+.ag-submit { margin-top: 4px; background: linear-gradient(90deg, var(--gold), var(--accent)); color: #06140d; font-weight: 800; }
+.ag-toggle {
+  display: block; width: 100%; margin-top: 16px;
+  background: none; border: none; color: var(--muted); font: inherit; font-size: 14px; cursor: pointer;
+}
+.ag-toggle b { color: var(--gold); }
+
 .modal-inner { width: min(94vw, 420px); display: flex; flex-direction: column; gap: 12px; }
 .flexcard {
   background: radial-gradient(500px 300px at 50% -10%, #14342300, #0a1611), #0a1611;

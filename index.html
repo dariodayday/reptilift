@@ -428,7 +428,7 @@
     </section>
 
     <footer class="footer">
-      Reptilift v9.13 — rough cut
+      Reptilift v9.14 — rough cut
       <button id="replayIntro" class="replay">↻ replay intro</button>
     </footer>
 
@@ -556,6 +556,24 @@
         <button class="btn ghost ob-back" id="obBack" type="button">← Back</button>
         <button class="btn ob-next" id="obNext" type="button">Next →</button>
       </div>
+    </div>
+  </div>
+
+  <!-- BLOCKING AUTH GATE: full-screen sign-in/up wall shown when cloud is
+       configured but nobody is logged in. Hidden by default (JS reveals it only
+       after the session check finds no session) so a logged-in user never flashes it. -->
+  <div id="authGate" class="authgate hidden" aria-hidden="true">
+    <div class="ag-card">
+      <img class="ag-logo" src="logo.png" alt="REPTILIFT" />
+      <h1 class="ag-title">REPTILIFT</h1>
+      <p class="ag-sub">Create an account to start training — your progress syncs across devices.</p>
+      <form id="agForm" class="ag-form" autocomplete="on">
+        <input id="agEmail" type="email" placeholder="email" autocomplete="email" required />
+        <input id="agPass" type="password" placeholder="password" autocomplete="current-password" minlength="6" required />
+        <div class="ag-err" id="agErr"></div>
+        <button class="btn ag-submit" id="agSubmit" type="submit">Sign up</button>
+      </form>
+      <button class="ag-toggle" id="agToggle" type="button">Already have an account? <b>Log in</b></button>
     </div>
   </div>
 
