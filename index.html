@@ -65,6 +65,7 @@
       <nav class="menu">
         <button class="menu-btn" data-go="friends-page"><span>👥</span> Friends &amp; Leaderboard</button>
         <button class="menu-btn" data-go="progress"><span>📈</span> Progress</button>
+        <button class="menu-btn" data-go="plates-page"><span>🏋️</span> Plate Calculator</button>
         <button class="menu-btn gold" id="flexBtn"><span>💪</span> Flex Card</button>
         <button class="menu-btn" data-go="contact-page"><span>✉️</span> Contact</button>
       </nav>
@@ -149,6 +150,35 @@
 
         <a class="contact-direct" href="mailto:reptilift@gmail.com">Email us directly</a>
         <p class="contact-ver" id="contactVer"></p>
+      </div>
+    </section>
+
+    <!-- PLATE CALCULATOR (dedicated page) — reached from the Menu button.
+         Pure in-gym utility: enter a target barbell weight + pick a bar, see the
+         plates to load per side (greedy, largest-first) and the closest loadable
+         weight. Bar preference persists in reptilift_profile.barWeight (synced).
+         All wiring + render live in renderPlates() — load-order safe. -->
+    <section id="plates-page" class="panel">
+      <button class="backlink" data-go="home" type="button">← Menu</button>
+      <h2 class="section-title acct-pagetitle">🏋️ Plate Calculator</h2>
+      <p class="hint">Enter a target weight and pick your bar — we'll show the plates to load on each side.</p>
+
+      <div class="plates">
+        <label class="pe-label">Target weight (lbs)
+          <input type="number" id="plTarget" min="0" step="2.5" inputmode="decimal" placeholder="e.g. 225" autocomplete="off" />
+        </label>
+
+        <div class="pl-barrow">
+          <span class="pl-barlbl">Bar weight</span>
+          <div class="pl-barbtns" id="plBarBtns">
+            <button class="pl-bar" data-bar="45" type="button">45 <small>Olympic</small></button>
+            <button class="pl-bar" data-bar="35" type="button">35 <small>Women's</small></button>
+            <button class="pl-bar" data-bar="15" type="button">15 <small>Training</small></button>
+            <button class="pl-bar" data-bar="0" type="button">0 <small>Just plates</small></button>
+          </div>
+        </div>
+
+        <div class="pl-result" id="plResult"></div>
       </div>
     </section>
 
@@ -463,7 +493,7 @@
     </section>
 
     <footer class="footer">
-      Reptilift v9.17 — rough cut
+      Reptilift v9.19 — rough cut
       <button id="replayIntro" class="replay">↻ replay intro</button>
     </footer>
 

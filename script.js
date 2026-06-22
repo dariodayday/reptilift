@@ -1,4 +1,4 @@
-// Reptilift v3.20 — earn your beast rank per exercise from your MMR.
+// Reptilift v3.21 — earn your beast rank per exercise from your MMR.
 // v3.16 adds a first-run ONBOARDING wizard (#onboard). Shown ONCE to brand-new
 // users after the intro finishes — detected as NOT profile.onboarded AND no real
 // data (no bodyweight, no sets, no workouts). Existing users are implicitly flagged
@@ -275,6 +275,10 @@ if (typeof profile.username !== "string") profile.username = "";   // public @ha
 // cloud save (logging in on a new device that has onboarded=true won't re-show the
 // wizard). Plain-guard only here (load-order safe; the check runs from init below).
 if (typeof profile.onboarded !== "boolean") profile.onboarded = false;
+// last-used barbell weight for the Plate Calculator (lbs). Lives inside the synced
+// profile so it follows the user across devices. Allowed bars: 45/35/15/0; anything
+// else falls back to 45 (Olympic). Plain guard only here — load-order safe.
+if (![45, 35, 15, 0].includes(profile.barWeight)) profile.barWeight = 45;
 // normalize the handle defensively at load with PLAIN guards only (no helper calls —
 // keeps load-order safe): lowercase, strip to [a-z0-9_], cap at 20.
 profile.username = profile.username.toLowerCase().replace(/[^a-z0-9_]/g, "").slice(0, 20);
@@ -532,6 +536,7 @@ function switchTab(name) {
   if (name === "achievements-page") renderAchievements();
   if (name === "friends-page") { try { if (typeof renderFriendsPage === "function") renderFriendsPage(); } catch (e) {} }
   if (name === "contact-page") { try { renderContact(); } catch (e) {} }
+  if (name === "plates-page") { try { renderPlates(); } catch (e) {} }
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
@@ -568,6 +573,113 @@ function renderContact() {
   });
   contactWired = true;
 }
+
+// ===== plate calculator =====
+// Practical in-gym tool: enter a target barbell weight, pick a bar, and we greedily
+// compute the plates to load PER SIDE for (target - bar)/2 from largest to smallest.
+// Bar preference persists in profile.barWeight (synced). Pure presentation — touches
+// no rank math or saved lift data. Wiring is bound ONCE (guarded) the first time the
+// page renders, so it's load-order safe.
+const PLATE_DENOMS = [45, 35, 25, 10, 5, 2.5];   // standard lb plate set, largest first
+const PLATE_BARS = [45, 35, 15, 0];
+// distinct colors per denomination for the little stacked-plate visual (uses the
+// gold/dark theme palette so it reads on the dark bg).
+const PLATE_COLORS = {
+  45: "#e0563b", 35: "#7c83ff", 25: "#f2c14e",
+  10: "#46b07a", 5: "#cf6a3a", 2.5: "#9aa6b2",
+};
+let platesWired = false;
+
+// greedy largest-first decomposition of a per-side weight into available plates.
+// Returns { plates:[{w,n}], loaded:Number (sum per side), remainder:Number }.
+function platesPerSide(perSide) {
+  const out = [];
+  let left = Math.max(0, perSide);
+  for (const w of PLATE_DENOMS) {
+    if (left + 1e-9 < w) continue;
+    const n = Math.floor((left + 1e-9) / w);
+    if (n > 0) { out.push({ w, n }); left -= n * w; }
+  }
+  const loaded = out.reduce((s, p) => s + p.w * p.n, 0);
+  return { plates: out, loaded, remainder: Math.max(0, perSide - loaded) };
+}
+
+function fmtPlate(n) {
+  // 2.5 stays 2.5, everything else drops the trailing .0
+  return Number.isInteger(n) ? String(n) : String(Math.round(n * 10) / 10);
+}
+
+function renderPlates() {
+  const out = document.getElementById("plResult");
+  // reflect the persisted bar selection on the buttons every render
+  const barBtns = document.querySelectorAll("#plBarBtns .pl-bar");
+  const bar = PLATE_BARS.includes(profile.barWeight) ? profile.barWeight : 45;
+  barBtns.forEach((b) => b.classList.toggle("active", Number(b.dataset.bar) === bar));
+
+  if (out) {
+    const targetEl = document.getElementById("plTarget");
+    const raw = targetEl ? targetEl.value.trim() : "";
+    const target = parseFloat(raw);
+
+    if (raw === "" || !isFinite(target)) {
+      out.innerHTML = `<div class="pl-empty">Enter a target weight to see your plates.</div>`;
+    } else if (target < bar) {
+      out.innerHTML = `<div class="pl-note">That's less than the bar (${fmtPlate(bar)} lb). Pick a lighter bar or a heavier target.</div>`;
+    } else if (Math.abs(target - bar) < 1e-9) {
+      out.innerHTML = `<div class="pl-note">Just the empty bar — no plates needed.</div>`;
+    } else {
+      const perSide = (target - bar) / 2;
+      const res = platesPerSide(perSide);
+      const actual = bar + res.loaded * 2;
+      const short = target - actual;
+
+      const list = res.plates.length
+        ? res.plates.map((p) => `${p.n} × ${fmtPlate(p.w)}`).join(", ")
+        : "—";
+
+      // stacked-plate visual: biggest plates inner (near the bar), smallest outer
+      const stack = res.plates.map((p) =>
+        Array.from({ length: p.n }).map(() => {
+          const h = 34 + (p.w / 45) * 56;          // bigger plate = taller block
+          const c = PLATE_COLORS[p.w] || "var(--gold)";
+          return `<span class="pl-plate" style="height:${h.toFixed(0)}px;--pc:${c}"><b>${fmtPlate(p.w)}</b></span>`;
+        }).join("")
+      ).join("");
+
+      const exact = short < 1e-9;
+      const actualLine = exact
+        ? `<div class="pl-actual ok">Loads to exactly <b>${fmtPlate(actual)} lb</b></div>`
+        : `<div class="pl-actual">Closest loadable: <b>${fmtPlate(actual)} lb</b> <span class="pl-short">(${fmtPlate(short)} lb short)</span></div>`;
+
+      out.innerHTML = `
+        <div class="pl-perside">Per side <small>(×2 + ${fmtPlate(bar)} lb bar)</small></div>
+        <div class="pl-bb">
+          <span class="pl-collar"></span>
+          <span class="pl-stack">${stack || '<span class="pl-nobar">no plates</span>'}</span>
+          <span class="pl-bar-line"></span>
+        </div>
+        <div class="pl-breakdown">${list}</div>
+        ${actualLine}
+      `;
+    }
+  }
+
+  if (platesWired) return;
+  // bar buttons: persist the choice + re-render
+  document.querySelectorAll("#plBarBtns .pl-bar").forEach((b) => {
+    b.addEventListener("click", () => {
+      const v = Number(b.dataset.bar);
+      profile.barWeight = PLATE_BARS.includes(v) ? v : 45;
+      try { save(); } catch (e) {}
+      renderPlates();
+    });
+  });
+  // recompute live as the target changes (input event covers typing + paste)
+  const targetEl = document.getElementById("plTarget");
+  if (targetEl) targetEl.addEventListener("input", () => renderPlates());
+  platesWired = true;
+}
+
 document.querySelectorAll(".tab").forEach((tab) => tab.addEventListener("click", () => switchTab(tab.dataset.tab)));
 document.querySelectorAll("[data-go]").forEach((btn) => btn.addEventListener("click", () => switchTab(btn.dataset.go)));
 

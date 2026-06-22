@@ -1016,6 +1016,65 @@ body {
 }
 .contact-ver { text-align: center; color: var(--muted); font-size: 12px; margin-top: 14px; opacity: .7; }
 
+/* ===== plate calculator ===== */
+.plates {
+  background: var(--card); border: 1px solid var(--line);
+  border-radius: 16px; padding: 18px 16px 20px;
+}
+.plates .pl-barrow { margin-bottom: 18px; }
+.pl-barlbl { display: block; font-size: 13px; font-weight: 700; color: var(--muted); margin-bottom: 8px; }
+.pl-barbtns { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.pl-bar {
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  padding: 10px 4px; border-radius: 12px; cursor: pointer;
+  background: var(--card2); border: 1px solid var(--line); color: var(--text);
+  font-size: 18px; font-weight: 800; font-family: inherit; line-height: 1;
+}
+.pl-bar small { font-size: 10px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .4px; }
+.pl-bar:active { transform: scale(.97); }
+.pl-bar.active {
+  border-color: var(--gold); color: var(--gold);
+  background: color-mix(in srgb, var(--gold) 14%, var(--card2));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--gold) 40%, transparent) inset;
+}
+.pl-bar.active small { color: color-mix(in srgb, var(--gold) 75%, var(--muted)); }
+
+.pl-result { margin-top: 4px; }
+.pl-empty, .pl-note {
+  text-align: center; color: var(--muted); font-size: 14px;
+  padding: 18px 8px; border: 1px dashed var(--line); border-radius: 12px;
+}
+.pl-perside { font-size: 13px; font-weight: 700; color: var(--muted); margin-bottom: 6px; }
+.pl-perside small { font-weight: 600; opacity: .8; }
+
+/* barbell visual: a sleeve line with plates stacked outward, biggest near the bar */
+.pl-bb {
+  position: relative; display: flex; align-items: center; gap: 3px;
+  min-height: 96px; padding: 10px 4px; margin: 4px 0 14px;
+  background: color-mix(in srgb, var(--card2) 70%, #000);
+  border: 1px solid var(--line); border-radius: 12px; overflow-x: auto;
+}
+.pl-collar { flex: 0 0 14px; height: 14px; border-radius: 3px; background: linear-gradient(var(--muted), #5d7f70); }
+.pl-stack { display: flex; align-items: center; gap: 3px; }
+.pl-plate {
+  flex: 0 0 auto; width: 16px; border-radius: 4px;
+  display: flex; align-items: flex-end; justify-content: center;
+  background: var(--pc, var(--gold));
+  box-shadow: 0 0 8px color-mix(in srgb, var(--pc, var(--gold)) 45%, transparent) inset;
+}
+.pl-plate b { font-size: 9px; font-weight: 800; color: #0b160f; padding-bottom: 2px; transform: rotate(-90deg); white-space: nowrap; }
+.pl-bar-line { flex: 1 1 40px; min-width: 40px; height: 6px; border-radius: 3px; background: linear-gradient(90deg, var(--muted), transparent); }
+.pl-nobar { color: var(--muted); font-size: 12px; padding: 0 8px; }
+
+.pl-breakdown {
+  font-size: 18px; font-weight: 800; color: var(--text);
+  text-align: center; font-variant-numeric: tabular-nums; margin-bottom: 8px;
+}
+.pl-actual { text-align: center; font-size: 14px; color: var(--muted); }
+.pl-actual b { color: var(--gold); font-size: 16px; }
+.pl-actual.ok b { color: var(--accent); }
+.pl-short { color: color-mix(in srgb, #e0563b 80%, var(--muted)); font-weight: 700; }
+
 .econ-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .econ-head .section-title { margin-bottom: 0; }
 
