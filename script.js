@@ -1,4 +1,17 @@
-// Reptilift v3.12 — earn your beast rank per exercise from your MMR.
+// Reptilift v3.13 — earn your beast rank per exercise from your MMR.
+// v3.13 adds FRIENDS + LEADERBOARD (requires login). Two new Supabase tables:
+// public_profiles (one publicly-readable row per user: username, name, small avatar,
+// overall_mmr, beast_id, streak — powers leaderboards) and friendships (request
+// edges: requester/addressee/status). A unique @username (lowercased, in
+// reptilift_profile.username, already synced) lets friends find you; the claim modal
+// validates 3–20 chars of [a-z0-9_] and handles taken-handle collisions gracefully.
+// publishPublicProfile() upserts your public row on login (once a username is known),
+// after a profile Save, and after finishWorkout (debounced, fail-silent offline).
+// The #friends-page (Menu → "👥 Friends & Leaderboard") has Friends / Requests /
+// Leaderboard sub-tabs, friend add/accept/decline/cancel/unfriend over RLS-secured
+// friendships, a read-only friend card, and a Friends|Global leaderboard. All reads/
+// writes go through the existing `supa` client under the user's auth; logged-out shows
+// a friendly prompt to the Account page and never errors. No new localStorage keys.
 // v3.12 adds permanent ACHIEVEMENTS / badges. A static ACHIEVEMENTS list (id, name,
 // desc, icon, check(ctx)) is evaluated by checkAchievements() against current game
 // state; newly-earned ones are stamped with today's date in the new reptilift_achievements
@@ -249,6 +262,9 @@ if (typeof profile.bio !== "string") profile.bio = "";
 if (typeof profile.avatar !== "string") profile.avatar = "";
 if (typeof profile.favoriteExercise !== "string") profile.favoriteExercise = "";  // exId of chosen favorite lift
 if (typeof profile.username !== "string") profile.username = "";   // public @handle (Friends/Leaderboard); synced inside reptilift_profile
+// normalize the handle defensively at load with PLAIN guards only (no helper calls —
+// keeps load-order safe): lowercase, strip to [a-z0-9_], cap at 20.
+profile.username = profile.username.toLowerCase().replace(/[^a-z0-9_]/g, "").slice(0, 20);
 let sets = JSON.parse(localStorage.getItem("reptilift_sets") || "[]");   // every set, all time
 let bests = JSON.parse(localStorage.getItem("reptilift_bests") || "{}"); // exId -> {beast, oneRM, date}
 let customEx = JSON.parse(localStorage.getItem("reptilift_customex") || "[]");
@@ -489,6 +505,7 @@ function switchTab(name) {
   if (name === "progress") renderProgress();
   if (name === "profile-page") renderProfile();
   if (name === "achievements-page") renderAchievements();
+  if (name === "friends-page") { try { if (typeof renderFriendsPage === "function") renderFriendsPage(); } catch (e) {} }
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 document.querySelectorAll(".tab").forEach((tab) => tab.addEventListener("click", () => switchTab(tab.dataset.tab)));
@@ -2888,4 +2905,583 @@ window.addEventListener("online", () => { if (cloudUser) scheduleCloudPush(); })
     const s = data && data.session;
     if (s && s.user && !cloudUser) onLogin(s.user);
   }).catch(() => {});
+})();
+
+// ============================================================================
+// ===== FRIENDS + LEADERBOARD ================================================
+// ============================================================================
+// Backed by two Supabase tables under the user's own auth (RLS enforces who can
+// read/write what — see the SQL in the v3.13 ship notes / report):
+//   public_profiles(user_id pk, username, name, avatar small-jpeg, overall_mmr,
+//                   beast_id, streak, updated_at)   — readable by any signed-in user
+//   friendships(id, requester_id, addressee_id, status 'pending'|'accepted', created_at)
+// Nothing here is stored in localStorage (besides the @handle, which already lives
+// in reptilift_profile and syncs). Everything is fetched live and fully guarded so
+// being offline / logged out / unconfigured NEVER throws or blanks the app.
+// LOAD-ORDER NOTE: every function below is only called from event handlers, from
+// switchTab, or from the onLogin/onLogout hooks — never from a top-level statement.
+
+// short username validator: 3–20 chars, lowercase a-z 0-9 underscore.
+const USERNAME_RE = /^[a-z0-9_]{3,20}$/;
+function normalizeUsername(s) {
+  return String(s == null ? "" : s).toLowerCase().replace(/[^a-z0-9_]/g, "").slice(0, 20);
+}
+
+// Downscale a data-URL (or remote URL) avatar to a SMALL square JPEG for the public
+// row. Reuses the canvas approach of downscaleImage() but takes a URL/dataURL source
+// instead of a File. ~96px keeps the public blob tiny. Resolves "" on any failure so
+// the leaderboard simply falls back to the 🦎 glyph.
+function downscaleDataUrl(src, size, quality) {
+  return new Promise((resolve) => {
+    if (!src) return resolve("");
+    try {
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const cv = document.createElement("canvas");
+          cv.width = size; cv.height = size;
+          const ctx = cv.getContext("2d");
+          const side = Math.min(img.width, img.height);
+          const sx = (img.width - side) / 2, sy = (img.height - side) / 2;
+          ctx.drawImage(img, sx, sy, side, side, 0, 0, size, size);
+          resolve(cv.toDataURL("image/jpeg", quality));
+        } catch (e) { resolve(""); }
+      };
+      img.onerror = () => resolve("");
+      img.src = src;
+    } catch (e) { resolve(""); }
+  });
+}
+
+// ---- publishPublicProfile(): upsert MY public_profiles row -------------------
+// Called on login (once a username is known), after a profile Save, and after
+// finishWorkout. Debounced + guarded; no-op when logged out / no username / offline.
+let publishTimer = null;
+let lastPublishedAvatar = { src: null, small: "" };   // cache the costly downscale
+function publishPublicProfile() {
+  if (!supa || !cloudUser) return;
+  if (!profile.username || !USERNAME_RE.test(profile.username)) return;   // need a valid handle
+  clearTimeout(publishTimer);
+  publishTimer = setTimeout(() => { publishTimer = null; doPublishPublicProfile(); }, 1200);
+}
+async function doPublishPublicProfile() {
+  if (!supa || !cloudUser || !profile.username) return;
+  try {
+    // only re-downscale the avatar when it actually changed (it's expensive).
+    let small = lastPublishedAvatar.small;
+    if (profile.avatar !== lastPublishedAvatar.src) {
+      small = await downscaleDataUrl(profile.avatar, 96, 0.6);
+      lastPublishedAvatar = { src: profile.avatar, small };
+    }
+    const ob = (typeof overallBeast === "function") ? overallBeast() : null;
+    const row = {
+      user_id: cloudUser.id,
+      username: profile.username,
+      name: (profile.name || "").slice(0, 24),
+      avatar: small || null,
+      overall_mmr: (typeof overallMMR === "function" && overallMMR()) || 0,
+      beast_id: ob ? ob.id : null,
+      streak: (typeof computeStreak === "function" && computeStreak()) || 0,
+      updated_at: new Date().toISOString(),
+    };
+    const { error } = await supa.from("public_profiles").upsert(row, { onConflict: "user_id" });
+    if (error) throw error;
+  } catch (e) {
+    // offline / RLS / unique-collision-on-old-handle — never crash; retries next call.
+  }
+}
+
+// ---- onCloudAuthChanged(): called from onLogin / onLogout -------------------
+// On login: if no username yet, prompt to claim one; otherwise publish + repaint.
+// On logout: just repaint (locked state). The #friends-page may not be visible — we
+// only repaint it if it's the active panel, but the username prompt fires regardless.
+function onCloudAuthChanged() {
+  if (cloudUser) {
+    if (!profile.username || !USERNAME_RE.test(profile.username)) {
+      // give the login/sync flow a beat to settle, then nudge for a handle.
+      setTimeout(() => { try { openUsernameModal(); } catch (e) {} }, 600);
+    } else {
+      publishPublicProfile();
+    }
+  }
+  const fp = document.getElementById("friends-page");
+  if (fp && fp.classList.contains("active")) { try { renderFriendsPage(); } catch (e) {} }
+  // keep the @handle visible on the profile header fresh too.
+  const pp = document.getElementById("profile-page");
+  if (pp && pp.classList.contains("active") && typeof renderProfile === "function") {
+    try { renderProfile(); } catch (e) {}
+  }
+}
+
+// ===== username claim modal =================================================
+const unModal = document.getElementById("usernameModal");
+const unInput = document.getElementById("unInput");
+const unErr = document.getElementById("unErr");
+const unSaveBtn = document.getElementById("unSave");
+const unCancelBtn = document.getElementById("unCancel");
+const unTitle = unModal ? unModal.querySelector(".un-title") : null;
+
+// forceFlow=true means the user explicitly chose "Change handle" (cancel allowed
+// either way; we never block the app on this).
+function openUsernameModal() {
+  if (!unModal) return;
+  if (unInput) unInput.value = profile.username || "";
+  if (unErr) unErr.textContent = "";
+  if (unTitle) unTitle.textContent = profile.username ? "Change your @handle" : "Choose your @handle";
+  unModal.classList.remove("hidden");
+  setTimeout(() => { if (unInput) unInput.focus(); }, 50);
+}
+function closeUsernameModal() { if (unModal) unModal.classList.add("hidden"); }
+
+async function submitUsername() {
+  if (!supa || !cloudUser) { closeUsernameModal(); return; }
+  const val = normalizeUsername(unInput ? unInput.value : "");
+  if (!USERNAME_RE.test(val)) {
+    if (unErr) unErr.textContent = "3–20 chars: lowercase letters, numbers, underscores.";
+    return;
+  }
+  if (unSaveBtn) { unSaveBtn.disabled = true; unSaveBtn.textContent = "…"; }
+  if (unErr) unErr.textContent = "";
+  try {
+    // attempt the claim by upserting our row with the chosen handle. The unique index
+    // on lower(username) rejects a taken handle with a 23505 unique-violation.
+    const ob = (typeof overallBeast === "function") ? overallBeast() : null;
+    let small = lastPublishedAvatar.small;
+    if (profile.avatar !== lastPublishedAvatar.src) {
+      small = await downscaleDataUrl(profile.avatar, 96, 0.6);
+      lastPublishedAvatar = { src: profile.avatar, small };
+    }
+    const { error } = await supa.from("public_profiles").upsert({
+      user_id: cloudUser.id,
+      username: val,
+      name: (profile.name || "").slice(0, 24),
+      avatar: small || null,
+      overall_mmr: (typeof overallMMR === "function" && overallMMR()) || 0,
+      beast_id: ob ? ob.id : null,
+      streak: (typeof computeStreak === "function" && computeStreak()) || 0,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: "user_id" });
+    if (error) {
+      if (error.code === "23505" || /duplicate|unique/i.test(error.message || "")) {
+        if (unErr) unErr.textContent = "that handle is taken — try another";
+      } else {
+        if (unErr) unErr.textContent = (error.message || "Couldn't save that. Try again.");
+      }
+      return;
+    }
+    // success — persist locally (auto-syncs inside reptilift_profile) + repaint.
+    profile.username = val;
+    save();
+    closeUsernameModal();
+    if (typeof renderProfile === "function") { try { renderProfile(); } catch (e) {} }
+    const fp = document.getElementById("friends-page");
+    if (fp && fp.classList.contains("active")) { try { renderFriendsPage(); } catch (e) {} }
+    if (soundOn) { try { blip(); } catch (e) {} }
+  } catch (e) {
+    if (unErr) unErr.textContent = "Network error — check your connection.";
+  } finally {
+    if (unSaveBtn) { unSaveBtn.disabled = false; unSaveBtn.textContent = "Claim handle"; }
+  }
+}
+if (unSaveBtn) unSaveBtn.addEventListener("click", submitUsername);
+if (unCancelBtn) unCancelBtn.addEventListener("click", closeUsernameModal);
+if (unInput) unInput.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); submitUsername(); } });
+if (unModal) unModal.addEventListener("click", (e) => { if (e.target === unModal) closeUsernameModal(); });
+
+// ===== friends page state + rendering =======================================
+let frActiveTab = "friends";       // friends | requests | board
+let frBoardMode = "friends";       // friends | global (leaderboard toggle)
+let frBusy = false;                // simple in-flight guard for mutating actions
+
+// small avatar markup from a public_profiles row (img or 🦎 fallback).
+function frAvatar(p) {
+  return p && p.avatar ? `<img src="${p.avatar}" alt="" />` : "🦎";
+}
+function beastEmojiFor(beastId) {
+  const b = beastId ? byId(beastId) : null;
+  return b ? b.emoji : "🥚";
+}
+
+// Entry point — called from switchTab("friends-page") and after auth changes.
+function renderFriendsPage() {
+  const locked = document.getElementById("frLocked");
+  const main = document.getElementById("frMain");
+  const lockMsg = document.getElementById("frLockedMsg");
+  if (!locked || !main) return;
+
+  if (!CLOUD_CONFIGURED || !supa) {
+    locked.classList.remove("hidden"); main.classList.add("hidden");
+    if (lockMsg) lockMsg.textContent = "Cloud sync isn't set up, so friends & the leaderboard are offline.";
+    return;
+  }
+  if (!cloudUser) {
+    locked.classList.remove("hidden"); main.classList.add("hidden");
+    if (lockMsg) lockMsg.textContent = "Sign in to add friends and climb the leaderboard.";
+    return;
+  }
+  locked.classList.add("hidden"); main.classList.remove("hidden");
+
+  // your handle line — prompt to claim if missing.
+  const me = document.getElementById("frMe");
+  if (me) {
+    if (profile.username && USERNAME_RE.test(profile.username)) {
+      me.innerHTML = `<span class="fr-me-av">${avatarInner()}</span>
+        <span class="fr-me-info"><b>${escapeHtml(profile.name || "You")}</b>
+        <span class="fr-me-handle">@${escapeHtml(profile.username)}</span></span>
+        <button class="fr-me-edit" id="frEditHandle" type="button">change</button>`;
+      const eh = document.getElementById("frEditHandle");
+      if (eh) eh.addEventListener("click", () => openUsernameModal());
+    } else {
+      me.innerHTML = `<span class="fr-me-av">🦎</span>
+        <span class="fr-me-info"><b>No handle yet</b>
+        <span class="fr-me-handle">friends find you by @username</span></span>
+        <button class="fr-me-edit gold" id="frClaimHandle" type="button">claim</button>`;
+      const ch = document.getElementById("frClaimHandle");
+      if (ch) ch.addEventListener("click", () => openUsernameModal());
+    }
+  }
+
+  // reflect the active sub-tab
+  document.querySelectorAll(".fr-tab").forEach((t) => t.classList.toggle("active", t.dataset.frtab === frActiveTab));
+  document.querySelectorAll(".fr-sub").forEach((s) => s.classList.toggle("active", s.dataset.frpanel === frActiveTab));
+
+  if (frActiveTab === "friends") loadFriendsList();
+  else if (frActiveTab === "requests") loadRequests();
+  else if (frActiveTab === "board") loadBoard();
+
+  refreshRequestBadge();   // always keep the badge count fresh
+}
+
+// ---- data helpers (all guarded, return [] on failure) ----------------------
+// fetch every friendship edge touching me (either side).
+async function fetchMyEdges() {
+  if (!supa || !cloudUser) return [];
+  try {
+    const { data, error } = await supa
+      .from("friendships")
+      .select("id, requester_id, addressee_id, status, created_at")
+      .or(`requester_id.eq.${cloudUser.id},addressee_id.eq.${cloudUser.id}`);
+    if (error) throw error;
+    return data || [];
+  } catch (e) { return []; }
+}
+// fetch public_profiles for a set of user_ids → map keyed by user_id.
+async function fetchProfiles(ids) {
+  const out = {};
+  const list = (ids || []).filter(Boolean);
+  if (!supa || !list.length) return out;
+  try {
+    const { data, error } = await supa
+      .from("public_profiles")
+      .select("user_id, username, name, avatar, overall_mmr, beast_id, streak")
+      .in("user_id", list);
+    if (error) throw error;
+    (data || []).forEach((p) => { out[p.user_id] = p; });
+    return out;
+  } catch (e) { return out; }
+}
+
+// ---- FRIENDS LIST ----------------------------------------------------------
+async function loadFriendsList() {
+  const box = document.getElementById("frFriendsList");
+  if (!box) return;
+  box.innerHTML = `<div class="fr-empty">Loading…</div>`;
+  const edges = await fetchMyEdges();
+  const accepted = edges.filter((e) => e.status === "accepted");
+  const friendIds = accepted.map((e) => e.requester_id === cloudUser.id ? e.addressee_id : e.requester_id);
+  if (!friendIds.length) {
+    box.innerHTML = `<div class="fr-empty">No friends yet. Add someone by their @username above. 🦎</div>`;
+    return;
+  }
+  const profs = await fetchProfiles(friendIds);
+  const rows = friendIds
+    .map((id) => ({ id, p: profs[id] }))
+    .sort((a, b) => ((b.p && b.p.overall_mmr) || 0) - ((a.p && a.p.overall_mmr) || 0));
+  box.innerHTML = rows.map(({ id, p }) => {
+    const name = (p && (p.name || p.username)) || "Lifter";
+    const handle = p && p.username ? `@${p.username}` : "";
+    const mmr = (p && p.overall_mmr) || 0;
+    return `<button class="fr-card" data-friend="${id}" type="button">
+      <span class="fr-card-av">${frAvatar(p)}</span>
+      <span class="fr-card-main">
+        <span class="fr-card-name">${escapeHtml(name)}</span>
+        <span class="fr-card-handle">${escapeHtml(handle)}</span>
+      </span>
+      <span class="fr-card-rank">${beastEmojiFor(p && p.beast_id)} <b>${mmr.toLocaleString()}</b></span>
+    </button>`;
+  }).join("");
+  box.querySelectorAll("[data-friend]").forEach((el) => {
+    el.addEventListener("click", () => openFriendModal(el.dataset.friend, profs[el.dataset.friend]));
+  });
+}
+
+// ---- ADD FRIEND ------------------------------------------------------------
+async function addFriendByUsername(raw) {
+  const msg = document.getElementById("frAddMsg");
+  const setMsg = (t, ok) => { if (msg) { msg.textContent = t; msg.className = "fr-msg" + (ok ? " ok" : t ? " err" : ""); } };
+  const uname = normalizeUsername(raw);
+  if (!uname || uname.length < 3) { setMsg("Enter a valid @username (3+ chars)."); return; }
+  if (uname === profile.username) { setMsg("That's you! 🦎"); return; }
+  if (frBusy) return;
+  frBusy = true; setMsg("Looking up @" + uname + "…", true);
+  try {
+    // 1) resolve the target user_id by handle.
+    const { data: target, error: lookErr } = await supa
+      .from("public_profiles").select("user_id, username").eq("username", uname).maybeSingle();
+    if (lookErr) throw lookErr;
+    if (!target) { setMsg("No lifter found with that handle."); return; }
+    if (target.user_id === cloudUser.id) { setMsg("That's you! 🦎"); return; }
+
+    // 2) inspect any existing edge between us.
+    const edges = await fetchMyEdges();
+    const existing = edges.find((e) =>
+      (e.requester_id === cloudUser.id && e.addressee_id === target.user_id) ||
+      (e.addressee_id === cloudUser.id && e.requester_id === target.user_id));
+    if (existing) {
+      if (existing.status === "accepted") { setMsg("You're already friends. 🤝", true); return; }
+      if (existing.requester_id === cloudUser.id) { setMsg("Request already sent — waiting on them."); return; }
+      // they already requested ME → accept it instead of a duplicate request.
+      const { error: accErr } = await supa.from("friendships").update({ status: "accepted" }).eq("id", existing.id);
+      if (accErr) throw accErr;
+      setMsg("They'd already requested you — you're now friends! 🤝", true);
+      const inp = document.getElementById("frAddInput"); if (inp) inp.value = "";
+      loadFriendsList(); refreshRequestBadge();
+      return;
+    }
+
+    // 3) no edge → send a pending request.
+    const { error: insErr } = await supa.from("friendships")
+      .insert({ requester_id: cloudUser.id, addressee_id: target.user_id, status: "pending" });
+    if (insErr) {
+      if (insErr.code === "23505") { setMsg("Request already exists."); return; }
+      throw insErr;
+    }
+    setMsg("Request sent to @" + uname + " ✓", true);
+    const inp = document.getElementById("frAddInput"); if (inp) inp.value = "";
+    refreshRequestBadge();
+  } catch (e) {
+    setMsg("Couldn't send that request — try again.");
+  } finally { frBusy = false; }
+}
+
+// ---- REQUESTS (incoming + outgoing pending) --------------------------------
+async function loadRequests() {
+  const inBox = document.getElementById("frIncoming");
+  const outBox = document.getElementById("frOutgoing");
+  if (inBox) inBox.innerHTML = `<div class="fr-empty">Loading…</div>`;
+  if (outBox) outBox.innerHTML = "";
+  const edges = await fetchMyEdges();
+  const incoming = edges.filter((e) => e.status === "pending" && e.addressee_id === cloudUser.id);
+  const outgoing = edges.filter((e) => e.status === "pending" && e.requester_id === cloudUser.id);
+  const ids = [...incoming.map((e) => e.requester_id), ...outgoing.map((e) => e.addressee_id)];
+  const profs = await fetchProfiles(ids);
+
+  if (inBox) {
+    inBox.innerHTML = incoming.length ? incoming.map((e) => {
+      const p = profs[e.requester_id];
+      return reqRowHtml(e.id, p, e.requester_id, "incoming");
+    }).join("") : `<div class="fr-empty">No incoming requests.</div>`;
+    inBox.querySelectorAll("[data-accept]").forEach((b) => b.addEventListener("click", () => acceptRequest(b.dataset.accept)));
+    inBox.querySelectorAll("[data-decline]").forEach((b) => b.addEventListener("click", () => deleteEdge(b.dataset.decline, "decline")));
+  }
+  if (outBox) {
+    outBox.innerHTML = outgoing.length ? outgoing.map((e) => {
+      const p = profs[e.addressee_id];
+      return reqRowHtml(e.id, p, e.addressee_id, "outgoing");
+    }).join("") : `<div class="fr-empty">No outgoing requests.</div>`;
+    outBox.querySelectorAll("[data-cancel]").forEach((b) => b.addEventListener("click", () => deleteEdge(b.dataset.cancel, "cancel")));
+  }
+  refreshRequestBadge();
+}
+function reqRowHtml(edgeId, p, uid, dir) {
+  const name = (p && (p.name || p.username)) || "Lifter";
+  const handle = p && p.username ? `@${p.username}` : "";
+  const actions = dir === "incoming"
+    ? `<span class="fr-reqbtns">
+         <button class="fr-mini ok" data-accept="${edgeId}" type="button">Accept</button>
+         <button class="fr-mini" data-decline="${edgeId}" type="button">Decline</button>
+       </span>`
+    : `<span class="fr-reqbtns">
+         <button class="fr-mini" data-cancel="${edgeId}" type="button">Cancel</button>
+       </span>`;
+  return `<div class="fr-card req">
+    <span class="fr-card-av">${frAvatar(p)}</span>
+    <span class="fr-card-main">
+      <span class="fr-card-name">${escapeHtml(name)}</span>
+      <span class="fr-card-handle">${escapeHtml(handle)}</span>
+    </span>
+    ${actions}
+  </div>`;
+}
+async function acceptRequest(edgeId) {
+  if (frBusy) return; frBusy = true;
+  try {
+    const { error } = await supa.from("friendships").update({ status: "accepted" }).eq("id", edgeId);
+    if (error) throw error;
+    if (soundOn) { try { blip(); } catch (e) {} }
+  } catch (e) {}
+  finally { frBusy = false; }
+  loadRequests();
+}
+// shared delete for decline (incoming) / cancel (outgoing) / unfriend (accepted).
+async function deleteEdge(edgeId, kind) {
+  if (frBusy) return; frBusy = true;
+  try {
+    const { error } = await supa.from("friendships").delete().eq("id", edgeId);
+    if (error) throw error;
+  } catch (e) {}
+  finally { frBusy = false; }
+  if (kind === "unfriend") { closeFriendModal(); loadFriendsList(); }
+  else loadRequests();
+}
+
+// keep the Requests sub-tab badge count in sync (incoming pending only).
+async function refreshRequestBadge() {
+  const badge = document.getElementById("frReqBadge");
+  if (!badge || !supa || !cloudUser) return;
+  try {
+    const { count, error } = await supa.from("friendships")
+      .select("id", { count: "exact", head: true })
+      .eq("addressee_id", cloudUser.id).eq("status", "pending");
+    if (error) throw error;
+    if (count && count > 0) { badge.textContent = count; badge.classList.remove("hidden"); }
+    else badge.classList.add("hidden");
+  } catch (e) { badge.classList.add("hidden"); }
+}
+
+// ---- LEADERBOARD -----------------------------------------------------------
+function loadBoard() {
+  document.querySelectorAll(".fr-bt").forEach((b) => b.classList.toggle("active", b.dataset.board === frBoardMode));
+  if (frBoardMode === "global") loadGlobalBoard();
+  else loadFriendsBoard();
+}
+function boardRowHtml(pos, p, isMe) {
+  const name = (p && (p.name || p.username)) || "Lifter";
+  const handle = p && p.username ? `@${p.username}` : "";
+  const mmr = (p && p.overall_mmr) || 0;
+  const medal = pos === 1 ? "🥇" : pos === 2 ? "🥈" : pos === 3 ? "🥉" : "";
+  return `<div class="lb-row${isMe ? " me" : ""}">
+    <span class="lb-pos">${medal || pos}</span>
+    <span class="lb-av">${frAvatar(p)}</span>
+    <span class="lb-main">
+      <span class="lb-name">${escapeHtml(name)}${isMe ? " <small>(you)</small>" : ""}</span>
+      <span class="lb-handle">${escapeHtml(handle)}</span>
+    </span>
+    <span class="lb-rank">${beastEmojiFor(p && p.beast_id)} <b>${mmr.toLocaleString()}</b></span>
+  </div>`;
+}
+// FRIENDS board = you + accepted friends, ranked by overall_mmr desc.
+async function loadFriendsBoard() {
+  const box = document.getElementById("frBoard");
+  if (!box) return;
+  box.innerHTML = `<div class="fr-empty">Loading…</div>`;
+  const edges = await fetchMyEdges();
+  const accepted = edges.filter((e) => e.status === "accepted");
+  const ids = accepted.map((e) => e.requester_id === cloudUser.id ? e.addressee_id : e.requester_id);
+  ids.push(cloudUser.id);
+  const profs = await fetchProfiles(ids);
+  // ensure MY row exists even if not yet published (use live local stats as fallback).
+  if (!profs[cloudUser.id]) {
+    const ob = (typeof overallBeast === "function") ? overallBeast() : null;
+    profs[cloudUser.id] = {
+      user_id: cloudUser.id, username: profile.username, name: profile.name,
+      avatar: profile.avatar, overall_mmr: (overallMMR && overallMMR()) || 0,
+      beast_id: ob ? ob.id : null,
+    };
+  }
+  const rows = Object.values(profs).sort((a, b) => (b.overall_mmr || 0) - (a.overall_mmr || 0));
+  box.innerHTML = rows.map((p, i) => boardRowHtml(i + 1, p, p.user_id === cloudUser.id)).join("")
+    || `<div class="fr-empty">Add friends to build your leaderboard. 🦎</div>`;
+}
+// GLOBAL board = top ~50 public_profiles by overall_mmr desc, + my own rank.
+async function loadGlobalBoard() {
+  const box = document.getElementById("frBoard");
+  if (!box) return;
+  box.innerHTML = `<div class="fr-empty">Loading…</div>`;
+  try {
+    const { data, error } = await supa
+      .from("public_profiles")
+      .select("user_id, username, name, avatar, overall_mmr, beast_id, streak")
+      .order("overall_mmr", { ascending: false })
+      .limit(50);
+    if (error) throw error;
+    const list = data || [];
+    let html = list.map((p, i) => boardRowHtml(i + 1, p, p.user_id === cloudUser.id)).join("");
+    const inTop = list.some((p) => p.user_id === cloudUser.id);
+    if (!inTop) {
+      // compute my global rank = (# of profiles with a strictly higher MMR) + 1.
+      const myMmr = (overallMMR && overallMMR()) || 0;
+      let myRank = null;
+      try {
+        const { count } = await supa.from("public_profiles")
+          .select("user_id", { count: "exact", head: true })
+          .gt("overall_mmr", myMmr);
+        if (typeof count === "number") myRank = count + 1;
+      } catch (e) {}
+      const ob = (typeof overallBeast === "function") ? overallBeast() : null;
+      const meP = { username: profile.username, name: profile.name, avatar: profile.avatar,
+        overall_mmr: myMmr, beast_id: ob ? ob.id : null };
+      html += `<div class="lb-divider">your rank</div>` + boardRowHtml(myRank || "—", meP, true);
+    }
+    box.innerHTML = html || `<div class="fr-empty">No public profiles yet — be the first! 🦎</div>`;
+  } catch (e) {
+    box.innerHTML = `<div class="fr-empty">Couldn't load the leaderboard. Try again.</div>`;
+  }
+}
+
+// ---- read-only friend profile modal ----------------------------------------
+const friendModal = document.getElementById("friendModal");
+function openFriendModal(uid, p) {
+  if (!friendModal) return;
+  const card = document.getElementById("friendCard");
+  const b = p && p.beast_id ? byId(p.beast_id) : null;
+  const color = b ? b.color : "#5b6168";
+  const name = (p && (p.name || p.username)) || "Lifter";
+  const handle = p && p.username ? `@${p.username}` : "";
+  const mmr = (p && p.overall_mmr) || 0;
+  const streak = (p && p.streak) || 0;
+  if (card) {
+    card.style.setProperty("--c", color);
+    card.innerHTML = `
+      <div class="fp-av">${frAvatar(p)}</div>
+      <div class="fp-name">${escapeHtml(name)}</div>
+      ${handle ? `<div class="fp-handle">${escapeHtml(handle)}</div>` : ""}
+      <div class="fp-rank">${b ? b.emoji + " " + escapeHtml(b.name) : "🥚 Unranked"}</div>
+      <div class="fp-stats">
+        <div class="fp-stat"><b>${mmr.toLocaleString()}</b><span>Overall MMR</span></div>
+        <div class="fp-stat"><b>${streak.toLocaleString()}</b><span>day streak</span></div>
+      </div>
+      <button class="btn ghost fp-unfriend" id="fpUnfriend" type="button">Unfriend</button>`;
+    const uf = document.getElementById("fpUnfriend");
+    if (uf) uf.addEventListener("click", () => unfriend(uid));
+  }
+  friendModal.classList.remove("hidden");
+}
+function closeFriendModal() { if (friendModal) friendModal.classList.add("hidden"); }
+async function unfriend(uid) {
+  if (!confirm("Remove this friend?")) return;
+  const edges = await fetchMyEdges();
+  const edge = edges.find((e) => e.status === "accepted" &&
+    (e.requester_id === uid || e.addressee_id === uid));
+  if (edge) deleteEdge(edge.id, "unfriend");
+  else { closeFriendModal(); loadFriendsList(); }
+}
+const friendCloseBtn = document.getElementById("friendClose");
+if (friendCloseBtn) friendCloseBtn.addEventListener("click", closeFriendModal);
+if (friendModal) friendModal.addEventListener("click", (e) => { if (e.target === friendModal) closeFriendModal(); });
+
+// ===== friends-page event wiring (bottom, after all helpers are defined) =====
+document.querySelectorAll(".fr-tab").forEach((t) => t.addEventListener("click", () => {
+  frActiveTab = t.dataset.frtab; renderFriendsPage();
+}));
+document.querySelectorAll(".fr-bt").forEach((b) => b.addEventListener("click", () => {
+  frBoardMode = b.dataset.board; loadBoard();
+}));
+(function wireAddFriend() {
+  const btn = document.getElementById("frAddBtn");
+  const inp = document.getElementById("frAddInput");
+  if (btn && inp) {
+    btn.addEventListener("click", () => addFriendByUsername(inp.value));
+    inp.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); addFriendByUsername(inp.value); } });
+  }
 })();
