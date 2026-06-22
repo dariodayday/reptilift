@@ -1,4 +1,4 @@
-// Reptilift v3.19 — earn your beast rank per exercise from your MMR.
+// Reptilift v3.20 — earn your beast rank per exercise from your MMR.
 // v3.16 adds a first-run ONBOARDING wizard (#onboard). Shown ONCE to brand-new
 // users after the intro finishes — detected as NOT profile.onboarded AND no real
 // data (no bodyweight, no sets, no workouts). Existing users are implicitly flagged
@@ -531,7 +531,42 @@ function switchTab(name) {
   if (name === "profile-page") renderProfile();
   if (name === "achievements-page") renderAchievements();
   if (name === "friends-page") { try { if (typeof renderFriendsPage === "function") renderFriendsPage(); } catch (e) {} }
+  if (name === "contact-page") { try { renderContact(); } catch (e) {} }
   window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+// ===== contact page =====
+// No backend: the compose form just builds a mailto: link to our inbox so the
+// user's own mail app opens prefilled. Wiring lives here and is bound once
+// (guarded by a flag) the first time the page is shown — load-order safe.
+const CONTACT_EMAIL = "reptilift@gmail.com";
+let contactWired = false;
+function renderContact() {
+  // stamp the app version so it rides along in bug reports
+  const ver = document.getElementById("contactVer");
+  if (ver) {
+    const footer = document.querySelector(".footer");
+    const fv = footer ? (footer.textContent || "").trim().split("—")[0].trim() : "Reptilift";
+    ver.textContent = "Sent from " + (fv || "Reptilift");
+  }
+  if (contactWired) return;
+  const form = document.getElementById("contactForm");
+  if (!form) return;
+  form.addEventListener("submit", (e) => {
+    e.preventDefault();
+    const topicEl = document.getElementById("contactTopic");
+    const msgEl = document.getElementById("contactMsg");
+    const topic = topicEl && topicEl.value ? topicEl.value : "Feedback";
+    const body = msgEl && msgEl.value ? msgEl.value : "";
+    const subject = "[Reptilift] " + topic;
+    const ver = document.getElementById("contactVer");
+    const sig = ver && ver.textContent ? "\n\n— " + ver.textContent : "";
+    const href = "mailto:" + CONTACT_EMAIL +
+      "?subject=" + encodeURIComponent(subject) +
+      "&body=" + encodeURIComponent(body + sig);
+    try { window.location.href = href; } catch (e2) {}
+  });
+  contactWired = true;
 }
 document.querySelectorAll(".tab").forEach((tab) => tab.addEventListener("click", () => switchTab(tab.dataset.tab)));
 document.querySelectorAll("[data-go]").forEach((btn) => btn.addEventListener("click", () => switchTab(btn.dataset.go)));

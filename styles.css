@@ -993,6 +993,29 @@ body {
 .pe-saved.hidden { display: none; }
 .pe-account { width: 100%; margin-top: 14px; }
 
+/* ===== contact page ===== */
+.contact {
+  background: var(--card); border: 1px solid var(--line); border-radius: 16px;
+  padding: 20px 18px 22px;
+}
+.contact-head { font-size: 20px; font-weight: 900; color: var(--gold); margin-bottom: 6px; }
+.contact-sub { color: var(--muted); font-size: 14px; line-height: 1.45; margin-bottom: 16px; }
+.contact-email {
+  display: block; text-align: center; font-weight: 800; font-size: 16px;
+  color: var(--gold); text-decoration: none; padding: 12px;
+  border: 1px solid color-mix(in srgb, var(--gold) 45%, transparent);
+  border-radius: 12px; background: color-mix(in srgb, var(--gold) 10%, transparent);
+  margin-bottom: 18px;
+}
+.contact-email:active { transform: scale(.99); }
+.contact-form .pe-label { margin-bottom: 14px; }
+.contact-form .btn { width: 100%; margin-top: 2px; }
+.contact-direct {
+  display: block; text-align: center; margin-top: 14px;
+  color: var(--muted); font-size: 14px; font-weight: 700; text-decoration: underline;
+}
+.contact-ver { text-align: center; color: var(--muted); font-size: 12px; margin-top: 14px; opacity: .7; }
+
 .econ-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .econ-head .section-title { margin-bottom: 0; }
 

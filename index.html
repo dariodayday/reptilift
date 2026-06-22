@@ -66,6 +66,7 @@
         <button class="menu-btn" data-go="friends-page"><span>👥</span> Friends &amp; Leaderboard</button>
         <button class="menu-btn" data-go="progress"><span>📈</span> Progress</button>
         <button class="menu-btn gold" id="flexBtn"><span>💪</span> Flex Card</button>
+        <button class="menu-btn" data-go="contact-page"><span>✉️</span> Contact</button>
       </nav>
       <div class="statbar">
         <div class="stat"><span id="statStreak">0</span><label>day streak</label></div>
@@ -114,6 +115,40 @@
           </div>
           <button class="btn ghost" id="acctLogout" type="button">Log out</button>
         </div>
+      </div>
+    </section>
+
+    <!-- CONTACT (dedicated page) — reached from the Menu button (NOT a bottom tab).
+         No backend: the compose form just builds a mailto: link to our inbox. -->
+    <section id="contact-page" class="panel">
+      <button class="backlink" data-go="home" type="button">← Menu</button>
+      <h2 class="section-title acct-pagetitle">Contact</h2>
+
+      <div class="contact">
+        <h3 class="contact-head">Get in touch 🦎</h3>
+        <p class="contact-sub">Questions, bugs, or feedback? We'd love to hear from you.</p>
+
+        <a class="contact-email" href="mailto:reptilift@gmail.com">✉️ reptilift@gmail.com</a>
+
+        <form id="contactForm" class="contact-form">
+          <label class="pe-label">Topic
+            <select id="contactTopic">
+              <option value="Feedback">Feedback</option>
+              <option value="Bug report">Bug report</option>
+              <option value="Feature idea">Feature idea</option>
+              <option value="Other">Other</option>
+            </select>
+          </label>
+
+          <label class="pe-label">Message
+            <textarea id="contactMsg" rows="5" placeholder="What's on your mind?"></textarea>
+          </label>
+
+          <button class="btn" id="contactSend" type="submit">✉️ Send email</button>
+        </form>
+
+        <a class="contact-direct" href="mailto:reptilift@gmail.com">Email us directly</a>
+        <p class="contact-ver" id="contactVer"></p>
       </div>
     </section>
 
@@ -428,7 +463,7 @@
     </section>
 
     <footer class="footer">
-      Reptilift v9.15 — rough cut
+      Reptilift v9.16 — rough cut
       <button id="replayIntro" class="replay">↻ replay intro</button>
     </footer>
 
