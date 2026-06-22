@@ -1,4 +1,11 @@
-// Reptilift v3.10 — earn your beast rank per exercise from your MMR.
+// Reptilift v3.12 — earn your beast rank per exercise from your MMR.
+// v3.12 adds permanent ACHIEVEMENTS / badges. A static ACHIEVEMENTS list (id, name,
+// desc, icon, check(ctx)) is evaluated by checkAchievements() against current game
+// state; newly-earned ones are stamped with today's date in the new reptilift_achievements
+// key (in SYNC_KEYS, so it cloud-syncs) and surfaced via a light celebratory toast.
+// Once earned, always earned. Lifetime Scales earned is tracked in quests.lifetime.coins
+// (existing key, no new storage) to feed the High Roller badge. Badges show on the
+// Profile (featured preview + count) and a dedicated #achievements-page grid.
 // v3.10 adds a "Favorite lift" to the Profile: chosen from a muscle-group-grouped
 // dropdown of the full catalog, stored as profile.favoriteExercise (exId) inside the
 // existing reptilift_profile object (auto-syncs, no new key). Shown read-only in the
@@ -38,10 +45,10 @@
 // and (b) we're NOT mid-apply of a cloud save (cloudSuppress guards that loop).
 // Non-reptilift writes (incl. Supabase's own session keys) pass straight through.
 const SYNC_KEYS = [
-  "reptilift_active", "reptilift_bests", "reptilift_bwlog", "reptilift_customex",
-  "reptilift_inventory", "reptilift_lastsets", "reptilift_profile", "reptilift_quests",
-  "reptilift_routines", "reptilift_sets", "reptilift_sound", "reptilift_streak",
-  "reptilift_wallet", "reptilift_workouts",
+  "reptilift_achievements", "reptilift_active", "reptilift_bests", "reptilift_bwlog",
+  "reptilift_customex", "reptilift_inventory", "reptilift_lastsets", "reptilift_profile",
+  "reptilift_quests", "reptilift_routines", "reptilift_sets", "reptilift_sound",
+  "reptilift_streak", "reptilift_wallet", "reptilift_workouts",
 ];
 let cloudUser = null;        // set to the Supabase user once logged in
 let cloudSuppress = false;   // true while applyCloud() is writing keys (don't echo back)
@@ -241,6 +248,7 @@ if (typeof profile.name !== "string") profile.name = "";
 if (typeof profile.bio !== "string") profile.bio = "";
 if (typeof profile.avatar !== "string") profile.avatar = "";
 if (typeof profile.favoriteExercise !== "string") profile.favoriteExercise = "";  // exId of chosen favorite lift
+if (typeof profile.username !== "string") profile.username = "";   // public @handle (Friends/Leaderboard); synced inside reptilift_profile
 let sets = JSON.parse(localStorage.getItem("reptilift_sets") || "[]");   // every set, all time
 let bests = JSON.parse(localStorage.getItem("reptilift_bests") || "{}"); // exId -> {beast, oneRM, date}
 let customEx = JSON.parse(localStorage.getItem("reptilift_customex") || "[]");
@@ -289,6 +297,14 @@ if (!quests.lifetime || typeof quests.lifetime !== "object") quests.lifetime = {
 if (!quests.daily || typeof quests.daily !== "object") quests.daily = {};
 if (!Array.isArray(streakx.bridges)) streakx.bridges = [];
 
+// ===== achievements state (permanent one-time badges) =====
+// reptilift_achievements: { earned: { <id>: ISOdateString } }. Once an id is in
+// `earned` it stays forever (never un-earned even if stats later drop). In SYNC_KEYS.
+// Shape is normalized defensively with plain guards (no helper calls at load time).
+let achievements = safeParse("reptilift_achievements", { earned: {} });
+if (!achievements.earned || typeof achievements.earned !== "object") achievements.earned = {};
+function saveAchievements() { localStorage.setItem("reptilift_achievements", JSON.stringify(achievements)); }
+
 function saveEconomy() {
   localStorage.setItem("reptilift_wallet", JSON.stringify(wallet));
   localStorage.setItem("reptilift_inventory", JSON.stringify(inventory));
@@ -297,7 +313,13 @@ function saveEconomy() {
 }
 const COIN = "🦎";                            // currency glyph (reptile scales)
 const CUR = "Scales";                         // currency name
-const addCoins = (n) => { wallet.balance = Math.max(0, wallet.balance + n); };
+// adjust the balance; when EARNING (n>0) also accrue a lifetime-earned counter in
+// quests.lifetime.coins (existing synced key — no new storage) for the High Roller
+// achievement. Spending (n<0) never decrements the lifetime total.
+const addCoins = (n) => {
+  wallet.balance = Math.max(0, wallet.balance + n);
+  if (n > 0) quests.lifetime.coins = (quests.lifetime.coins || 0) + n;
+};
 function refreshWallet() {                     // update every on-screen balance chip
   document.querySelectorAll("[data-wallet]").forEach((el) => { el.textContent = wallet.balance.toLocaleString(); });
 }
@@ -466,6 +488,7 @@ function switchTab(name) {
   if (name === "quests") renderQuests();
   if (name === "progress") renderProgress();
   if (name === "profile-page") renderProfile();
+  if (name === "achievements-page") renderAchievements();
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 document.querySelectorAll(".tab").forEach((tab) => tab.addEventListener("click", () => switchTab(tab.dataset.tab)));
@@ -741,6 +764,9 @@ function finishWorkout() {
   // celebrations first (sequential), then the recap. Zero rank-ups => straight to review.
   // Suppress the review's own SFX only when celebrations actually played their sounds.
   playCelebrations(queue, () => showReview(review, queue.length > 0));
+  // stats changed (MMR/streak) — refresh the public leaderboard row. Debounced &
+  // guarded; no-op when logged out / no username / offline.
+  try { if (typeof publishPublicProfile === "function") publishPublicProfile(); } catch (e) {}
 }
 
 // Collect one finish-time celebration per exercise that ranked up this session.
@@ -910,6 +936,9 @@ function showReview(r, silent) {
 document.getElementById("reviewDone").addEventListener("click", () => {
   reviewModal.classList.add("hidden");
   switchTab("home");
+  // surface any badges earned this session AFTER the recap is dismissed, so the
+  // light toast doesn't clash with rank-up celebrations / the review modal.
+  checkAchievements();
 });
 function addExerciseToWorkout(exId) {
   if (!workout) startWorkout();
@@ -988,6 +1017,7 @@ function completeSet(i, j) {
   // NOTE: rank-ups are NOT celebrated mid-workout anymore — they're recorded in
   // workout.events above and played back one by one at finishWorkout().
   save(); saveWorkout(); renderWorkout(); tick();
+  checkAchievements();   // a completed set may cross a set/rank/group threshold
 }
 
 // timers
@@ -1468,7 +1498,9 @@ function claimQuest(id) {
   if (already || prog < q.goal) return;            // guard double-claim / incomplete
   addCoins(q.reward);
   if (daily) quests.daily.claimed[id] = true; else quests.claimed[id] = true;
+  quests.lifetime.claims = (quests.lifetime.claims || 0) + 1;   // total quests claimed (Quest Hunter)
   saveEconomy();
+  checkAchievements();   // claiming/earning Scales may unlock Quest Hunter / High Roller
   if (soundOn) { playRankUpSfx(); buzz([30, 40, 30]); }
   // refresh whichever views exist — the Quests page and the menu daily widget
   // share claim logic, so both must reflect the payout / claimed state.
@@ -1487,6 +1519,202 @@ function renderHomeQuests() {
     .map((q) => buildQuestRow(q, q.prog(quests.daily), !!quests.daily.claimed[q.id]))
     .join("");
   box.querySelectorAll("[data-claim]").forEach((b) => b.addEventListener("click", () => claimQuest(b.dataset.claim)));
+}
+
+// ===== achievements (permanent milestone badges) =====
+// A static catalog of one-time badges. Each: id, name, desc, icon, and a pure
+// check(ctx) predicate over a snapshot of game state (achievementCtx()). Earned
+// state lives in `achievements.earned` (reptilift_achievements, in SYNC_KEYS);
+// once earned, always earned. checkAchievements() runs at the moments state
+// changes (init, set complete, finish, quest claim, coin earn) and toasts the
+// newly-unlocked ones. Checks are read-only and guarded so they never throw.
+const MUSCLE_GROUPS = ["Chest", "Back", "Shoulders", "Legs", "Arms", "Core"];
+const APEX_OVERALL_TIER = tierOf("rhino");   // "Perfectly Balanced": Raging Rhino+ overall
+
+// Build a read-only snapshot of everything the checks need. Cheap; called per check pass.
+function achievementCtx() {
+  // muscle groups trained (any logged set whose exercise has that group)
+  const groupsTrained = new Set();
+  sets.forEach((s) => { const ex = exById(s.exId); if (ex && ex.group) groupsTrained.add(ex.group); });
+  // top per-lift beast tier across all bests + whether each big-three lift is ranked
+  let topLiftTier = 0;
+  const ranked = {};
+  for (const id in bests) {
+    const rec = bests[id];
+    const b = rec && typeof rec.mmr === "number" ? classify(rec.mmr) : (rec && rec.beast ? byId(rec.beast) : null);
+    if (b) { ranked[id] = true; topLiftTier = Math.max(topLiftTier, tierOf(b.id)); }
+  }
+  const ob = overallBeast();
+  // biggest single-workout volume ever (Σ load×reps per finished session)
+  let bestWorkoutVolume = 0;
+  const vol = volumeSeries();   // [{label,value}] one entry per day with volume
+  vol.forEach((p) => { if (p.value > bestWorkoutVolume) bestWorkoutVolume = p.value; });
+  return {
+    sets, workouts, ranked, groupsTrained, topLiftTier,
+    overallTier: ob ? tierOf(ob.id) : 0,
+    streak: computeStreak(),
+    bestWorkoutVolume,
+    questClaims: (quests.lifetime && quests.lifetime.claims) || 0,
+    rankups: (quests.lifetime && quests.lifetime.rankups) || 0,
+    coinsEarned: (quests.lifetime && quests.lifetime.coins) || 0,
+    balance: wallet.balance,
+    rankedCount: Object.keys(ranked).length,
+  };
+}
+
+const ACHIEVEMENTS = [
+  { id: "a_firstrep",  icon: "🥚", name: "First Rep",          desc: "Finish your very first workout.",
+    check: (c) => c.workouts.length >= 1 },
+  { id: "a_hatchling", icon: "🐣", name: "Hatchling",          desc: "Earn your first rank on any lift.",
+    check: (c) => c.rankedCount >= 1 },
+  { id: "a_bigthree",  icon: "🏋️", name: "The Big Three",      desc: "Rank bench, squat AND deadlift.",
+    check: (c) => c.ranked.bench && c.ranked.squat && c.ranked.deadlift },
+  { id: "a_jack",      icon: "🧩", name: "Jacked of All Trades", desc: "Train every muscle group at least once.",
+    check: (c) => MUSCLE_GROUPS.every((g) => c.groupsTrained.has(g)) },
+  { id: "a_century",   icon: "💯", name: "Century",            desc: "Log 100 total sets.",
+    check: (c) => c.sets.length >= 100 },
+  { id: "a_500sets",   icon: "📚", name: "Set Machine",        desc: "Log 500 total sets.",
+    check: (c) => c.sets.length >= 500 },
+  { id: "a_veteran",   icon: "🎖️", name: "Iron Veteran",       desc: "Complete 50 workouts.",
+    check: (c) => c.workouts.length >= 50 },
+  { id: "a_week",      icon: "🔥", name: "Week Warrior",       desc: "Hit a 7-day streak.",
+    check: (c) => c.streak >= 7 },
+  { id: "a_unbreak",   icon: "🛡️", name: "Unbreakable",        desc: "Hit a 30-day streak.",
+    check: (c) => c.streak >= 30 },
+  { id: "a_climbing",  icon: "🧗", name: "Climbing",           desc: "Rank up 25 times in total.",
+    check: (c) => c.rankups >= 25 },
+  { id: "a_oneton",    icon: "🪨", name: "One Ton",            desc: "Move 2,000+ lb of volume in a single workout.",
+    check: (c) => c.bestWorkoutVolume >= 2000 },
+  { id: "a_apexlift",  icon: "🐙", name: "Apex Predator",      desc: "Reach Optimal Octopus on any lift.",
+    check: (c) => c.topLiftTier >= tierOf("octopus") },
+  { id: "a_balanced",  icon: "⚖️", name: "Perfectly Balanced", desc: `Reach ${byId("rhino").emoji} ${byId("rhino").name} or better overall.`,
+    check: (c) => c.overallTier >= APEX_OVERALL_TIER },
+  { id: "a_apexbeast", icon: "👑", name: "Apex Beast",         desc: "Reach Optimal Octopus OVERALL.",
+    check: (c) => c.overallTier >= tierOf("octopus") },
+  { id: "a_quests",    icon: "🎯", name: "Quest Hunter",       desc: "Claim 20 quests in total.",
+    check: (c) => c.questClaims >= 20 },
+  { id: "a_highroller",icon: "🦎", name: "High Roller",        desc: "Earn 1,000 Scales over your lifetime.",
+    check: (c) => c.coinsEarned >= 1000 },
+  { id: "a_collector", icon: "🏆", name: "Collector",          desc: "Rank 10 different lifts.",
+    check: (c) => c.rankedCount >= 10 },
+];
+
+// Evaluate every un-earned achievement against current state; stamp newly-earned
+// ones with today's date and toast them. Cheap, fully guarded — never throws and
+// never blocks the caller. Returns the list of newly-earned achievement objects.
+function checkAchievements() {
+  try {
+    const ctx = achievementCtx();
+    const fresh = [];
+    ACHIEVEMENTS.forEach((a) => {
+      if (achievements.earned[a.id]) return;            // already earned — leave it
+      let got = false;
+      try { got = !!a.check(ctx); } catch (e) { got = false; }
+      if (got) { achievements.earned[a.id] = todayStr(); fresh.push(a); }
+    });
+    if (fresh.length) {
+      saveAchievements();
+      queueAchievementToast(fresh);
+    }
+    return fresh;
+  } catch (e) { return []; }
+}
+
+// ---- unlock toast (light celebratory popup, NOT the big rank-up animation) ----
+// A small badge popup appears bottom-center for ~2.4s, dismissible by tap. Multiple
+// simultaneous unlocks are combined into one toast (with a count). Queued so a burst
+// (e.g. a workout finish) shows one at a time without stacking.
+let achToastQueue = [];
+let achToastShowing = false;
+function queueAchievementToast(list) {
+  if (!list || !list.length) return;
+  achToastQueue.push(list.slice());
+  if (!achToastShowing) showNextAchievementToast();
+}
+function showNextAchievementToast() {
+  const group = achToastQueue.shift();
+  if (!group) { achToastShowing = false; return; }
+  achToastShowing = true;
+  let el = document.getElementById("achToast");
+  if (!el) {
+    el = document.createElement("div");
+    el.id = "achToast";
+    el.className = "achtoast";
+    document.body.appendChild(el);
+  }
+  const head = group[0];
+  const more = group.length - 1;
+  el.innerHTML = `
+    <span class="at-ic">${head.icon}</span>
+    <span class="at-main">
+      <span class="at-tag">🏅 Achievement unlocked</span>
+      <span class="at-name">${escapeHtml(head.name)}${more > 0 ? ` <small>+${more} more</small>` : ""}</span>
+    </span>`;
+  // restart the entrance animation cleanly even on back-to-back toasts
+  el.classList.remove("show");
+  void el.offsetWidth;
+  el.classList.add("show");
+  if (soundOn) { try { playRankUpSfx(); } catch (e) {} buzz([20, 40, 20]); }
+  let closed = false, timer = null;
+  const close = () => {
+    if (closed) return; closed = true;
+    if (timer) { clearTimeout(timer); timer = null; }
+    el.classList.remove("show");
+    el.removeEventListener("click", close);
+    setTimeout(showNextAchievementToast, 360);   // let it slide out before the next
+  };
+  el.addEventListener("click", close);
+  timer = setTimeout(close, 2400);
+}
+
+// ---- achievements display (Profile preview + dedicated page) ----
+function earnedCount() { return ACHIEVEMENTS.filter((a) => achievements.earned[a.id]).length; }
+
+// one badge tile (earned = full color, locked = dimmed). Earned tiles expose the
+// date earned via title (tap/hover). Locked tiles still show name + desc to chase.
+function achTileHtml(a) {
+  const date = achievements.earned[a.id];
+  const earned = !!date;
+  const when = earned ? `Earned ${prettyDate(date)}` : "Locked";
+  return `<div class="achtile ${earned ? "earned" : "locked"}" title="${escapeHtml(when)}">
+    <span class="ach-ic">${a.icon}</span>
+    <span class="ach-name">${escapeHtml(a.name)}</span>
+    <span class="ach-desc">${escapeHtml(a.desc)}</span>
+    <span class="ach-when">${earned ? escapeHtml(when) : "🔒 Locked"}</span>
+  </div>`;
+}
+
+// full grid on the dedicated #achievements-page (earned first, then locked).
+function renderAchievements() {
+  const grid = document.getElementById("achGrid");
+  if (!grid) return;
+  const count = document.getElementById("achCount");
+  if (count) count.textContent = `${earnedCount()} / ${ACHIEVEMENTS.length} unlocked`;
+  const earned = ACHIEVEMENTS.filter((a) => achievements.earned[a.id]);
+  const locked = ACHIEVEMENTS.filter((a) => !achievements.earned[a.id]);
+  grid.innerHTML = [...earned, ...locked].map(achTileHtml).join("");
+}
+
+// compact preview on the Profile page: count + the first few earned badges (or the
+// next ones to chase if none earned yet). Tapping opens the full page.
+function renderProfileAchievements() {
+  const box = document.getElementById("profileAch");
+  if (!box) return;
+  const got = earnedCount();
+  const earned = ACHIEVEMENTS.filter((a) => achievements.earned[a.id]);
+  const preview = (earned.length ? earned : ACHIEVEMENTS).slice(0, 4);
+  box.innerHTML = `
+    <button class="pa-head" data-go="achievements-page" type="button">
+      <span class="pa-title">🏅 Achievements</span>
+      <span class="pa-count">${got} / ${ACHIEVEMENTS.length}</span>
+      <span class="pl-arrow">›</span>
+    </button>
+    <div class="pa-row">${preview.map((a) => {
+      const isEarned = !!achievements.earned[a.id];
+      return `<span class="pa-badge ${isEarned ? "earned" : "locked"}" title="${escapeHtml(a.name)}">${a.icon}</span>`;
+    }).join("")}</div>`;
+  const head = box.querySelector(".pa-head");
+  if (head) head.addEventListener("click", () => switchTab("achievements-page"));
 }
 
 // ===== home dashboard =====
@@ -1613,6 +1841,7 @@ function renderProfile() {
     hero.innerHTML = `
       <div class="ph-avatar">${avatarInner()}</div>
       <div class="ph-name">${escapeHtml(name)}</div>
+      ${profile.username ? `<div class="ph-handle">@${escapeHtml(profile.username)}</div>` : ""}
       <div class="ph-rank">${rankTxt}</div>
       <div class="ph-mmr"><span>Overall MMR</span><b>${mmr != null ? mmr.toLocaleString() : "—"}</b></div>
       ${profile.bio ? `<div class="ph-bio">${escapeHtml(profile.bio)}</div>` : ""}
@@ -1636,6 +1865,8 @@ function renderProfile() {
       <div class="pstat"><b style="font-size:15px;line-height:1.5">${escapeHtml(tlTxt)}</b><span>top lift</span></div>
       ${favHtml}`;
   }
+
+  renderProfileAchievements();
 
   // populate the edit fields from the stored profile
   const nameI = document.getElementById("peName");
@@ -1710,6 +1941,9 @@ let stagedAvatar = null;
     save();                          // persist name/bio/avatar (triggers cloud auto-push)
     refreshAvatars();
     renderProfile();
+    // name/avatar may have changed — refresh the public leaderboard row (debounced,
+    // guarded; only does anything when logged in with a username set).
+    try { if (typeof publishPublicProfile === "function") publishPublicProfile(); } catch (e) {}
     if (savedLbl) {
       savedLbl.classList.remove("hidden");
       setTimeout(() => savedLbl.classList.add("hidden"), 1800);
@@ -2358,6 +2592,7 @@ if (!bwLog.length && profile.bodyweight) logBodyweight(profile.bodyweight);
 rolloverDaily();              // reset daily quests if the calendar day changed
 maybeAutoFreeze();            // spend a Streak Freeze if it can save a broken streak
 refreshWallet();              // paint balance chips
+checkAchievements();          // award any badges already earned by existing data (load-order safe: all helpers defined by now)
 renderChart();
 renderWorkout();
 if (workout) startTicker();   // resume timer if a session was in progress
@@ -2485,6 +2720,10 @@ function applyCloud(data) {
 async function onLogin(user) {
   cloudUser = user;
   paintAccount();
+  // Friends/leaderboard: repaint the page for the signed-in state and publish the
+  // public profile once a username is known. Guarded so a missing module/offline
+  // never blocks login or sync.
+  try { if (typeof onCloudAuthChanged === "function") onCloudAuthChanged(); } catch (e) {}
   // If we JUST applied a cloud save and reloaded, don't re-pull — just push to
   // keep updated_at fresh and clear the guard.
   if (sessionStorage.getItem("reptilift_just_synced")) {
@@ -2526,6 +2765,7 @@ function onLogout() {
   clearTimeout(pushTimer); pushTimer = null;
   cloudMode = "signin";
   paintAccount();                            // local data stays on the device untouched
+  try { if (typeof onCloudAuthChanged === "function") onCloudAuthChanged(); } catch (e) {}
 }
 
 // ---- account form / UI wiring ----

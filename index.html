@@ -63,6 +63,7 @@
       </div>
 
       <nav class="menu">
+        <button class="menu-btn" data-go="friends-page"><span>👥</span> Friends &amp; Leaderboard</button>
         <button class="menu-btn" data-go="progress"><span>📈</span> Progress</button>
         <button class="menu-btn gold" id="flexBtn"><span>💪</span> Flex Card</button>
       </nav>
@@ -125,6 +126,9 @@
       <div class="profilehero" id="profileHero"></div>
       <div class="profilestats" id="profileStats"></div>
 
+      <!-- achievements preview: count + a few badges; taps through to the full grid -->
+      <div class="profileach" id="profileAch"></div>
+
       <!-- editable fields -->
       <div class="profileedit">
         <h3 class="acct-title pe-title">Edit Profile</h3>
@@ -161,6 +165,99 @@
         <button class="btn ghost pe-account" data-go="account-page" type="button">☁️ Account &amp; Cloud Sync</button>
       </div>
     </section>
+
+    <!-- ACHIEVEMENTS (dedicated page) — reached from the Profile preview.
+         Permanent one-time badges; earned state in reptilift_achievements (synced). -->
+    <section id="achievements-page" class="panel">
+      <button class="backlink" data-go="profile-page" type="button">← Profile</button>
+      <div class="ach-headrow">
+        <h2 class="section-title acct-pagetitle">🏅 Achievements</h2>
+        <span class="ach-count" id="achCount">0 / 0 unlocked</span>
+      </div>
+      <p class="hint">Permanent milestone badges. Tap an earned tile to see when you unlocked it.</p>
+      <div id="achGrid" class="achgrid"></div>
+    </section>
+
+    <!-- FRIENDS + LEADERBOARD (dedicated page) — reached from the Menu button.
+         All friends/leaderboard data lives in Supabase (public_profiles +
+         friendships); fetched live, nothing new in localStorage. Requires login. -->
+    <section id="friends-page" class="panel">
+      <button class="backlink" data-go="home" type="button">← Menu</button>
+      <h2 class="section-title acct-pagetitle">Friends</h2>
+
+      <!-- shown when Supabase isn't configured OR the user is logged out -->
+      <div id="frLocked" class="fr-locked hidden">
+        <div class="fr-locked-emoji">👥</div>
+        <p class="fr-locked-msg" id="frLockedMsg">Sign in to add friends and climb the leaderboard.</p>
+        <button class="btn" data-go="account-page" type="button">☁️ Go to Account</button>
+      </div>
+
+      <!-- main friends UI (logged in) -->
+      <div id="frMain" class="hidden">
+        <!-- your handle line -->
+        <div class="fr-me" id="frMe"></div>
+
+        <!-- sub-tabs -->
+        <div class="fr-tabs">
+          <button class="fr-tab active" data-frtab="friends" type="button">Friends</button>
+          <button class="fr-tab" data-frtab="requests" type="button">Requests <span class="fr-badge hidden" id="frReqBadge">0</span></button>
+          <button class="fr-tab" data-frtab="board" type="button">🏆 Leaderboard</button>
+        </div>
+
+        <!-- FRIENDS sub-panel -->
+        <div class="fr-sub active" data-frpanel="friends">
+          <div class="fr-addrow">
+            <input id="frAddInput" type="text" placeholder="add by @username" autocomplete="off" maxlength="20" />
+            <button class="btn" id="frAddBtn" type="button">Add</button>
+          </div>
+          <div class="fr-msg" id="frAddMsg"></div>
+          <div id="frFriendsList" class="fr-list"></div>
+        </div>
+
+        <!-- REQUESTS sub-panel -->
+        <div class="fr-sub" data-frpanel="requests">
+          <h3 class="sub">Incoming</h3>
+          <div id="frIncoming" class="fr-list"></div>
+          <h3 class="sub">Outgoing</h3>
+          <div id="frOutgoing" class="fr-list"></div>
+        </div>
+
+        <!-- LEADERBOARD sub-panel -->
+        <div class="fr-sub" data-frpanel="board">
+          <div class="fr-boardtoggle">
+            <button class="fr-bt active" data-board="friends" type="button">Friends</button>
+            <button class="fr-bt" data-board="global" type="button">Global</button>
+          </div>
+          <div id="frBoard" class="fr-board"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- FRIEND PROFILE (read-only view of a friend's public profile) -->
+    <div id="friendModal" class="modal hidden">
+      <div class="modal-inner">
+        <div class="fp-card" id="friendCard"></div>
+        <button class="btn ghost" id="friendClose">Close</button>
+      </div>
+    </div>
+
+    <!-- USERNAME CLAIM PROMPT -->
+    <div id="usernameModal" class="modal hidden">
+      <div class="modal-inner">
+        <div class="un-card">
+          <div class="un-emoji">🦎</div>
+          <h2 class="un-title">Choose your @handle</h2>
+          <p class="un-sub">This is how friends find you. 3–20 characters: lowercase letters, numbers, underscores.</p>
+          <div class="un-inputwrap">
+            <span class="un-at">@</span>
+            <input id="unInput" type="text" placeholder="beastmode" autocomplete="off" maxlength="20" />
+          </div>
+          <div class="un-err" id="unErr"></div>
+          <button class="btn" id="unSave" type="button">Claim handle</button>
+          <button class="btn ghost" id="unCancel" type="button">Not now</button>
+        </div>
+      </div>
+    </div>
 
     <!-- PROGRESS (charts) — dedicated screen, reached from Menu / Ranks (not a tab) -->
     <section id="progress" class="panel">
@@ -297,7 +394,7 @@
     </section>
 
     <footer class="footer">
-      Reptilift v9.4 — rough cut
+      Reptilift v9.6 — rough cut
       <button id="replayIntro" class="replay">↻ replay intro</button>
     </footer>
 

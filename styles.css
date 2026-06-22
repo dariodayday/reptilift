@@ -779,6 +779,74 @@ body {
 .profilestats .pstat b { display: block; font-size: 22px; font-weight: 800; }
 .profilestats .pstat span { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
 
+/* achievements — profile preview card */
+.profileach { margin-bottom: 18px; }
+.profileach .pa-head {
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  background: var(--card); border: 1px solid var(--line); border-radius: 12px 12px 0 0;
+  padding: 12px 14px; color: var(--text); cursor: pointer; text-align: left;
+}
+.profileach .pa-title { font-weight: 800; font-size: 15px; flex: 1; }
+.profileach .pa-count {
+  font-size: 13px; font-weight: 800; color: var(--gold);
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.profileach .pa-head .pl-arrow { color: var(--muted); font-size: 20px; line-height: 1; }
+.profileach .pa-row {
+  display: flex; gap: 10px; flex-wrap: wrap;
+  background: var(--card2); border: 1px solid var(--line); border-top: none;
+  border-radius: 0 0 12px 12px; padding: 12px 14px;
+}
+.profileach .pa-badge {
+  width: 38px; height: 38px; border-radius: 10px; display: grid; place-items: center;
+  font-size: 22px; line-height: 1; border: 1px solid var(--line);
+}
+.profileach .pa-badge.earned { background: color-mix(in srgb, var(--gold) 16%, transparent); border-color: color-mix(in srgb, var(--gold) 45%, transparent); }
+.profileach .pa-badge.locked { filter: grayscale(1); opacity: .35; }
+
+/* achievements — dedicated page grid */
+.ach-headrow { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.ach-headrow .section-title { margin-bottom: 0; }
+.ach-count { font-size: 13px; font-weight: 800; color: var(--gold); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.achgrid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+@media (min-width: 520px) { .achgrid { grid-template-columns: repeat(3, 1fr); } }
+.achtile {
+  background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+  padding: 14px 10px 12px; text-align: center; display: flex; flex-direction: column;
+  align-items: center; gap: 5px; position: relative;
+}
+.achtile .ach-ic { font-size: 34px; line-height: 1; }
+.achtile .ach-name { font-weight: 800; font-size: 14px; }
+.achtile .ach-desc { font-size: 11px; color: var(--muted); line-height: 1.35; }
+.achtile .ach-when { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; margin-top: 2px; }
+.achtile.earned {
+  border-color: color-mix(in srgb, var(--gold) 45%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--gold) 22%, transparent) inset;
+}
+.achtile.earned .ach-ic { text-shadow: 0 0 16px color-mix(in srgb, var(--gold) 55%, transparent); }
+.achtile.earned .ach-when { color: var(--accent); }
+.achtile.locked { opacity: .62; }
+.achtile.locked .ach-ic { filter: grayscale(1); opacity: .5; }
+.achtile.locked .ach-when { color: var(--muted); }
+
+/* achievement unlock toast (light, bottom-center, dismissible) */
+.achtoast {
+  position: fixed; left: 50%; bottom: calc(env(safe-area-inset-bottom, 0px) + 78px);
+  transform: translate(-50%, 24px); z-index: 9000;
+  display: flex; align-items: center; gap: 12px; max-width: 88vw;
+  background: color-mix(in srgb, var(--card) 88%, #000);
+  border: 1px solid color-mix(in srgb, var(--gold) 55%, var(--line));
+  border-radius: 14px; padding: 12px 16px; cursor: pointer;
+  box-shadow: 0 10px 30px rgba(0,0,0,.5), 0 0 0 1px color-mix(in srgb, var(--gold) 18%, transparent) inset;
+  opacity: 0; pointer-events: none; transition: transform .32s cubic-bezier(.2,.8,.3,1), opacity .32s ease;
+}
+.achtoast.show { transform: translate(-50%, 0); opacity: 1; pointer-events: auto; }
+.achtoast .at-ic { font-size: 30px; line-height: 1; text-shadow: 0 0 14px color-mix(in srgb, var(--gold) 60%, transparent); }
+.achtoast .at-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.achtoast .at-tag { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .6px; color: var(--gold); }
+.achtoast .at-name { font-size: 15px; font-weight: 800; color: var(--text); }
+.achtoast .at-name small { font-size: 12px; font-weight: 700; color: var(--muted); }
+
 .profileedit {
   background: var(--card); border: 1px solid var(--line); border-radius: 16px;
   padding: 20px; max-width: 480px; margin: 0 auto;
