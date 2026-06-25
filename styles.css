@@ -61,7 +61,7 @@
 /* the OLD scaly REPTILIFT logo (transparent png), revealed centered IN the eye */
 .intro-mark {
   position: absolute; left: 50%; top: 50%; z-index: 4;
-  width: clamp(210px, 64vw, 330px); height: auto; pointer-events: none;
+  width: clamp(320px, 90vw, 560px); height: auto; pointer-events: none;
   transform: translate(-50%, -50%) scale(.9); opacity: 0;
   filter: drop-shadow(0 2px 8px rgba(0,0,0,.55)) drop-shadow(0 0 18px rgba(47,174,107,.45));
 }
