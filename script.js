@@ -1,4 +1,4 @@
-// Reptilift v3.31 — earn your beast rank per exercise from your MMR.
+// Reptilift v3.32 — earn your beast rank per exercise from your MMR.
 // v3.31 rebuilds the startup splash: two soft-glowing CSS reptile eyes in the dark,
 // then the gradient REPTILIFT wordmark (matching the home .brand) fades in, total ~2.3s.
 // v3.28 makes ACHIEVEMENTS tiered: each badge levels up through escalating thresholds
@@ -546,6 +546,24 @@ function nextRankTarget(ex, targetMMR, bw) {
     return { kind: "reps", reps };
   }
   return { kind: "weight", weight: Math.max(5, Math.round(need / 5) * 5) };  // round to nearest 5 lb plate
+}
+// Concrete "lift X × Y reps" goal to reach a band-floor MMR — what to ACTUALLY do
+// for the next rank, in the display unit. Load lifts → a weight at a 5-rep working
+// set; bodyweight lifts → reps needed at current bodyweight. Returns "" if no bw.
+function nextRankGoal(ex, targetMMR, bw) {
+  const need = oneRMForMMR(targetMMR, bw, ex);            // required oneRM (lb)
+  if (need == null) return "";
+  if (ex.type === "bodyweight") {
+    const load = bw * ex.factor;
+    if (load <= 0) return "";
+    const reps = Math.max(1, Math.ceil((need / load - 1) * 30));
+    return `${reps} reps`;
+  }
+  const reps = 5;                                          // express as a 5-rep set
+  const wLb = need / (1 + reps / 30);                      // weight at 5 reps → that oneRM
+  const step = (typeof kgMode === "function" && kgMode()) ? 2.5 : 5;
+  const w = Math.max(step, Math.round(toDisplayWeight(wLb) / step) * step);
+  return `${w} ${unitLabel()} × ${reps}`;
 }
 const todaySets = () => sets.filter((s) => s.date === todayStr());
 
@@ -1511,7 +1529,9 @@ function renderYourRanks() {
         const nb = BEASTS[ti];               // next tier beast
         const span = nb.mmrMin - b.mmrMin;
         pct = Math.max(4, Math.min(100, Math.round(((rec.mmr - b.mmrMin) / span) * 100)));
-        next = `<div class="rankrow-next">${nb.mmrMin - rec.mmr} MMR to ${nb.emoji} ${nb.name}</div>`;
+        const goal = nextRankGoal(e, nb.mmrMin, profile.bodyweight);
+        const tgt = goal ? `${goal} →` : `+${nb.mmrMin - rec.mmr} MMR →`;
+        next = `<div class="rankrow-next">${tgt} ${nb.emoji} ${nb.name}</div>`;
       } else if (!hasMmr) {
         next = `<div class="rankrow-next">Set bodyweight to rank up</div>`;
       } else {
