@@ -46,12 +46,15 @@
 .eye {
   position: absolute; z-index: 3; border-radius: 50%; aspect-ratio: 1;
   transform: translate(-50%, -50%) scaleY(.05); transform-origin: center; opacity: 0;
-  background: radial-gradient(circle at 50% 42%, #ffffff 4%, #f4ff7a 19%, #cdee2a 45%, #6fa81a 73%, #21560c 100%);
+  /* fade the outer edge to transparent so there's no hard disc edge — the eye
+     melts into the dark instead of looking like a cut-out circle */
+  background: radial-gradient(circle at 50% 42%, #ffffff 3%, #f7ff8a 15%, #cdee2a 36%, #7bb524 58%, rgba(46,96,18,.5) 80%, transparent 100%);
   transition: transform 1s cubic-bezier(.2,.85,.25,1), opacity .5s ease, filter .9s ease;
 }
 .intro.go .eye {
   opacity: 1; transform: translate(-50%, -50%) scaleY(1);
-  filter: drop-shadow(0 0 9px #d9ff5e) drop-shadow(0 0 24px rgba(150,255,60,.55));
+  /* soft, diffuse multi-layer bloom (no hard halo ring) so the glow blends */
+  filter: drop-shadow(0 0 10px rgba(205,255,90,.45)) drop-shadow(0 0 30px rgba(150,255,60,.28)) drop-shadow(0 0 55px rgba(120,210,50,.15));
 }
 .intro.look .eye { animation: eyeBlink 5s ease-in-out infinite; }
 
