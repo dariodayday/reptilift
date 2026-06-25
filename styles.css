@@ -42,20 +42,35 @@
   background: radial-gradient(circle, rgba(150,255,60,.28) 0%, rgba(120,210,50,.12) 42%, transparent 70%);
 }
 .iris {
-  position: absolute; inset: 0; border-radius: 50%; transform-origin: center;
+  position: absolute; inset: 0; border-radius: 50%; transform-origin: center; overflow: hidden;
   transform: scaleY(.04); opacity: 0;
-  background: radial-gradient(circle at 50% 42%,
-    #fffef2 2%, #ffe98a 12%, #d8f24a 30%, #8fd028 50%, #4f9a1c 70%, rgba(40,90,18,.4) 86%, transparent 100%);
+  background:
+    /* fine radiating fibres — gives the iris real texture, not a flat gradient */
+    repeating-conic-gradient(from 0deg at 50% 44%,
+      rgba(255,248,205,.13) 0deg 1deg, rgba(10,32,4,.20) 1deg 2.2deg),
+    /* colour + depth: hot amber centre → green body → dark limbal ring at the rim */
+    radial-gradient(circle at 50% 44%,
+      #fffdf0 4%, #ffe488 11%, #d7e646 24%, #8fc62e 41%, #4d971f 60%, #245c12 80%, rgba(7,24,4,.95) 92%, transparent 100%);
+  box-shadow: inset 0 0 16px 3px rgba(0,0,0,.4);   /* shading toward the rim for a domed look */
+}
+.iris::after {                                      /* soft wet cornea reflection across the top */
+  content: ""; position: absolute; left: 8%; top: 6%; width: 84%; height: 46%; border-radius: 50%;
+  background: radial-gradient(ellipse at 50% 0%, rgba(255,255,255,.28), transparent 62%);
+  pointer-events: none;
 }
 .pupil {
-  position: absolute; left: 50%; top: 50%; width: 28%; height: 80%; border-radius: 50%; opacity: 0;
-  background: radial-gradient(ellipse at 50% 36%, #14300a 0%, #050d02 72%);
-  box-shadow: inset 0 0 6px 1px rgba(0,0,0,.55);
-  transform: translate(-50%, -50%) scale(2.2, .04);
+  position: absolute; left: 50%; top: 50%; width: 25%; height: 84%; border-radius: 50%; opacity: 0;
+  background: radial-gradient(ellipse at 50% 38%, #08180b 0%, #000 58%);
+  box-shadow: inset 0 0 5px 1px rgba(0,0,0,.75), 0 0 8px 2px rgba(150,255,70,.3);  /* deep slit + faint glow where the iris meets it */
+  transform: translate(-50%, -50%) scale(2.4, .04); z-index: 2;
 }
 .glint {
-  position: absolute; left: 37%; top: 29%; width: 14%; height: 14%; border-radius: 50%; opacity: 0;
-  background: radial-gradient(circle, #fff 0%, rgba(255,255,255,.55) 48%, transparent 74%);
+  position: absolute; left: 35%; top: 25%; width: 17%; height: 17%; border-radius: 50%; opacity: 0; z-index: 3;
+  background: radial-gradient(circle at 42% 38%, #fff 0%, rgba(255,255,255,.75) 32%, transparent 68%);
+}
+.glint::after {                                     /* tiny secondary catchlight for realism */
+  content: ""; position: absolute; left: 135%; top: 150%; width: 42%; height: 42%; border-radius: 50%;
+  background: radial-gradient(circle, #fff 0%, transparent 70%); opacity: .65;
 }
 
 /* the OLD scaly REPTILIFT logo (transparent png), revealed centered IN the eye */
