@@ -16,12 +16,15 @@
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <!-- STARTUP ANIMATION: eyes glow in the dark, then the logo wipes in around them -->
+  <!-- STARTUP SPLASH: a reptile eye opens in the dark, then the REPTILIFT wordmark fades in -->
   <div id="intro" class="intro">
-    <div class="stage">
-      <img class="intro-logo" src="intro-logo.png" alt="REPTILIFT" />
-      <div class="eye" style="left:18.2%;top:43.5%;width:7%;"><div class="slit"></div><div class="glint"></div></div>
-      <div class="eye" style="left:40.4%;top:45.2%;width:6.5%;"><div class="slit"></div><div class="glint"></div></div>
+    <div class="splash">
+      <div class="eyewrap">
+        <div class="iris"></div>
+        <div class="pupil"></div>
+        <div class="glint"></div>
+      </div>
+      <h1 class="intro-word">REPTILIFT</h1>
     </div>
   </div>
 
@@ -532,7 +535,7 @@
     </section>
 
     <footer class="footer">
-      Reptilift v9.38 — rough cut
+      Reptilift v9.39 — rough cut
       <button id="replayIntro" class="replay">↻ replay intro</button>
     </footer>
 
