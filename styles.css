@@ -32,10 +32,11 @@
 }
 .intro.hide { opacity: 0; pointer-events: none; }
 
-.splash { position: relative; display: flex; flex-direction: column; align-items: center; gap: clamp(20px, 6vw, 38px); }
+/* eye + logo stacked/overlapping, both centered */
+.splash { position: relative; display: grid; place-items: center; }
 
 /* the eye */
-.eyewrap { position: relative; width: clamp(86px, 22vw, 130px); aspect-ratio: 1; }
+.eyewrap { position: relative; width: clamp(150px, 38vw, 210px); aspect-ratio: 1; }
 .eyewrap::before {                       /* soft glow bloom behind the eye */
   content: ""; position: absolute; inset: -45%; border-radius: 50%; opacity: 0;
   background: radial-gradient(circle, rgba(150,255,60,.28) 0%, rgba(120,210,50,.12) 42%, transparent 70%);
@@ -57,23 +58,21 @@
   background: radial-gradient(circle, #fff 0%, rgba(255,255,255,.55) 48%, transparent 74%);
 }
 
-/* the wordmark — same clean gold→green gradient as the home brand */
-.intro-word {
-  font-family: var(--font-display); font-weight: 800; line-height: 1;
-  font-size: clamp(30px, 10vw, 50px); letter-spacing: 3px; text-transform: uppercase;
-  background: linear-gradient(118deg, var(--gold) 0%, #ffe7a0 22%, var(--accent) 58%, #2aa564 100%);
-  -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; color: transparent;
-  filter: drop-shadow(0 2px 8px rgba(0,0,0,.5)) drop-shadow(0 0 16px rgba(47,174,107,.25));
-  opacity: 0; transform: translateY(16px);
+/* the OLD scaly REPTILIFT logo (transparent png), revealed centered IN the eye */
+.intro-mark {
+  position: absolute; left: 50%; top: 50%; z-index: 4;
+  width: clamp(210px, 64vw, 330px); height: auto; pointer-events: none;
+  transform: translate(-50%, -50%) scale(.9); opacity: 0;
+  filter: drop-shadow(0 2px 8px rgba(0,0,0,.55)) drop-shadow(0 0 18px rgba(47,174,107,.45));
 }
 
 /* choreography — runs once .go is added */
-.intro.go .eyewrap { filter: drop-shadow(0 0 16px rgba(150,255,60,.4)); }
-.intro.go .eyewrap::before { animation: eyeBloom 2.4s ease-in-out .2s both; }
+.intro.go .eyewrap { filter: drop-shadow(0 0 18px rgba(150,255,60,.4)); }
+.intro.go .eyewrap::before { animation: eyeBloom 2.6s ease-in-out .2s both; }
 .intro.go .iris  { animation: irisOpen .75s cubic-bezier(.2,.9,.3,1) .15s forwards; }
 .intro.go .pupil { animation: pupilOpen .9s cubic-bezier(.3,.85,.3,1) .55s forwards; }
 .intro.go .glint { animation: glintIn .5s ease .95s forwards; }
-.intro.go .intro-word { animation: wordIn .6s cubic-bezier(.2,.8,.3,1) 1.05s forwards; }
+.intro.go .intro-mark { animation: markIn .7s cubic-bezier(.2,.8,.3,1) 1.05s forwards; }
 
 @keyframes irisOpen  { 0% { transform: scaleY(.04); opacity: 0; } 45% { opacity: 1; } 100% { transform: scaleY(1); opacity: 1; } }
 @keyframes pupilOpen {
@@ -82,17 +81,17 @@
   100% { transform: translate(-50%, -50%) scale(1, 1);    opacity: 1; }   /* constricts to a slit */
 }
 @keyframes glintIn  { from { opacity: 0; transform: scale(.4); } to { opacity: .95; transform: scale(1); } }
-@keyframes wordIn   { to { opacity: 1; transform: translateY(0); } }
+@keyframes markIn   { 0% { opacity: 0; transform: translate(-50%, -50%) scale(.9); } 100% { opacity: 1; transform: translate(-50%, -50%) scale(1); } }
 @keyframes eyeBloom { 0% { opacity: 0; } 30% { opacity: 1; } 70% { opacity: 1; } 100% { opacity: .85; } }
 
 #app { opacity: 0; transition: opacity 1s ease; }
 #app.ready { opacity: 1; }
 @media (prefers-reduced-motion: reduce) {
-  .intro .iris, .intro .pupil, .intro .glint, .intro .intro-word, .intro .eyewrap::before { animation: none !important; }
+  .intro .iris, .intro .pupil, .intro .glint, .intro .intro-mark, .intro .eyewrap::before { animation: none !important; }
   .iris { opacity: 1; transform: scaleY(1); }
   .pupil { opacity: 1; transform: translate(-50%, -50%) scale(1, 1); }
   .glint { opacity: .9; }
-  .intro-word { opacity: 1; transform: none; }
+  .intro-mark { opacity: 1; transform: translate(-50%, -50%) scale(1); }
   .eyewrap::before { opacity: 1; }
   #app { opacity: 1; transition: none; }
 }
