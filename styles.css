@@ -269,8 +269,10 @@ body {
   border-left: 4px solid var(--c, var(--line));
   border-radius: var(--r-chip); padding: 13px 15px;
 }
-.rankrow-top { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
-.rankrow-ex { font-weight: 700; }
+.rankrow-top { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.rankrow-ex { font-weight: 700; display: inline-flex; align-items: center; gap: 9px; min-width: 0; }
+.rankrow-ex .thumb { width: 34px; height: 34px; flex: 0 0 34px; }
+.rankrow-name { min-width: 0; }
 .rankrow-beast { color: var(--muted); font-size: 14px; text-align: right; }
 .rankrow-beast small { opacity: .7; }
 .progress { margin-top: 9px; height: 7px; background: #0c1110; border-radius: 999px; overflow: hidden; }

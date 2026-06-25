@@ -1,4 +1,4 @@
-// Reptilift v3.33 — earn your beast rank per exercise from your MMR.
+// Reptilift v3.34 — earn your beast rank per exercise from your MMR.
 // v3.31 rebuilds the startup splash: two soft-glowing CSS reptile eyes in the dark,
 // then the gradient REPTILIFT wordmark (matching the home .brand) fades in, total ~2.3s.
 // v3.28 makes ACHIEVEMENTS tiered: each badge levels up through escalating thresholds
@@ -1521,8 +1521,9 @@ function renderYourRanks() {
     return;
   }
   box.innerHTML = "";
+  const mmrOrZero = (id) => (typeof bests[id].mmr === "number" ? bests[id].mmr : -1);
   ranked
-    .sort((a, b) => bests[b.id].oneRM - bests[a.id].oneRM)
+    .sort((a, b) => mmrOrZero(b.id) - mmrOrZero(a.id) || bests[b.id].oneRM - bests[a.id].oneRM)
     .forEach((e) => {
       const rec = bests[e.id];
       const b = classify(rec.mmr) || byId(rec.beast) || BEASTS[0];
@@ -1547,7 +1548,7 @@ function renderYourRanks() {
       const mmrTxt = hasMmr ? rec.mmr.toLocaleString() : "—";
       row.innerHTML = `
         <div class="rankrow-top">
-          <span class="rankrow-ex">${e.name}</span>
+          <span class="rankrow-ex">${exThumb(e)}<span class="rankrow-name">${e.name}</span></span>
           <span class="rankrow-beast">${b.emoji} ${b.name} <small>· ~${toDisplayWeight(rec.oneRM)} ${unitLabel()}</small></span>
         </div>
         <div class="progress"><i style="width:${pct}%"></i></div>
