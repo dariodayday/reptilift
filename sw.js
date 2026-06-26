@@ -1,10 +1,10 @@
 // Reptilift service worker — cache core assets for offline use.
-const CACHE = "reptilift-v4.52";
+const CACHE = "reptilift-v4.53";
 const ASSETS = [
   "./", "index.html", "styles.css", "script.js", "supabase-config.js",
   "logo.png", "icon-192.png", "icon-512.png",
-  // v4.51: the startup splash is now fully code-drawn (SVG/CSS) — no intro raster
-  // assets to precache (old intro-eye.png / intro-*.png are no longer used).
+  // v4.53: the startup splash uses two real photos — precache so it works offline.
+  "intro-claws.png", "intro-eye.png",
   "apple-touch-icon.png", "favicon.png", "manifest.json",
 ];
 

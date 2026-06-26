@@ -16,52 +16,17 @@
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <!-- STARTUP SPLASH: a self-contained, code-drawn cinematic. Claw-tear gashes rake
-       across a scaly surface in one swipe, a glowing reptile eye tears open (eyelid
-       morph + iris/pupil/spec reveal), it holds, then the neon-green REPTILIFT title
-       builds in last as everything else fades to black, with lightning bolts + a burst
-       flash. JS-driven (Web Animations API + rAF) via introTimers()/playIntro(); see
-       script.js. No raster assets — eye, claw marks, bolts & title are all SVG/CSS. -->
+  <!-- STARTUP SPLASH: a simple, robust, image-driven cinematic. The glowing claw-slash
+       hero photo flares in with a white impact flash, crossfades into the reptile-eye
+       photo (slowly zooming/focusing), then the neon REPTILIFT title ignites over it
+       and settles before handing off to the app. All animation is CSS @keyframes keyed
+       off `.intro.go`; script.js (introTimers/playIntro) only toggles classes + times
+       the hand-off, so it's robust and never strands the user on a black screen. -->
   <div id="intro" class="intro">
-    <div class="ix-skin" aria-hidden="true"></div>
-
-    <svg class="ix-eyeSvg" viewBox="0 0 400 400" aria-hidden="true">
-      <defs>
-        <filter id="ixBlur" x="-50%" y="-50%" width="200%" height="200%">
-          <feGaussianBlur stdDeviation="3" />
-        </filter>
-        <filter id="ixTear">
-          <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" seed="7" result="n" />
-          <feDisplacementMap in="SourceGraphic" in2="n" scale="8" />
-        </filter>
-        <radialGradient id="ixIrisGrad" cx="50%" cy="50%" r="50%">
-          <stop offset="0%" stop-color="#f0ffd0" />
-          <stop offset="22%" stop-color="#d9f99d" />
-          <stop offset="55%" stop-color="#a3e635" />
-          <stop offset="100%" stop-color="#3f5e0a" />
-        </radialGradient>
-        <radialGradient id="ixHalo" cx="50%" cy="50%" r="50%">
-          <stop offset="0%" stop-color="rgba(163,230,53,.9)" />
-          <stop offset="60%" stop-color="rgba(132,204,22,.35)" />
-          <stop offset="100%" stop-color="rgba(0,0,0,0)" />
-        </radialGradient>
-        <clipPath id="ixLid"><path id="ixLidPath" d="" /></clipPath>
-        <clipPath id="ixSweep"><rect id="ixSweepRect" x="-260" y="160" width="0" height="120" transform="rotate(-18 200 200)" /></clipPath>
-      </defs>
-      <circle id="ixEyeHalo" cx="200" cy="200" r="150" fill="url(#ixHalo)" opacity="0" />
-      <g clip-path="url(#ixLid)">
-        <circle id="ixIris" cx="200" cy="200" r="92" fill="url(#ixIrisGrad)" />
-        <ellipse id="ixPupil" cx="200" cy="200" rx="16" ry="80" fill="#0a0f06" />
-        <circle id="ixSpec" cx="172" cy="168" r="14" fill="#f7ffd9" opacity=".9" />
-        <path id="ixEyeRim" d="" fill="none" stroke="#a3e635" stroke-width="0" opacity="0" />
-      </g>
-      <g id="ixTears" filter="url(#ixTear)" clip-path="url(#ixSweep)"></g>
-    </svg>
-
-    <div class="ix-bolts" aria-hidden="true"></div>
-    <h1 class="ix-logo">REPTILIFT</h1>
-    <div class="ix-burst" aria-hidden="true"></div>
-    <div class="ix-flash" aria-hidden="true"></div>
+    <img class="introClaws" src="intro-claws.png" alt="" aria-hidden="true" />
+    <img class="introEye" src="intro-eye.png" alt="" aria-hidden="true" />
+    <h1 class="introTitle">REPTILIFT</h1>
+    <div class="introFlash" aria-hidden="true"></div>
   </div>
 
   <div id="app">
@@ -571,7 +536,7 @@
     </section>
 
     <footer class="footer">
-      Reptilift v9.51 — rough cut
+      Reptilift v9.52 — rough cut
       <button id="replayIntro" class="replay">↻ replay intro</button>
     </footer>
 

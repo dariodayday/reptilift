@@ -1,10 +1,10 @@
-// Reptilift v3.43 — earn your beast rank per exercise from your MMR.
-// v3.42 replaces the startup splash with a self-contained, code-drawn cinematic
-// (no raster assets): claw-tear gashes rake across in one swipe (flash + shake), a
-// glowing reptile eye tears open (eyelid morph + iris/pupil/spec reveal), it holds,
-// then the neon REPTILIFT title builds in last as everything fades to black with
-// lightning + a burst flash. JS-driven (Web Animations API + rAF) via introTimers();
-// it hands off to the app at ~5s. playIntro() (settings) fully resets & replays.
+// Reptilift v3.44 — earn your beast rank per exercise from your MMR.
+// v3.44 rebuilds the startup splash as a simple, robust, image-driven sequence: the
+// glowing claw-slash photo (intro-claws.png) flares in with an impact flash, crossfades
+// into the reptile-eye photo (intro-eye.png) which zooms/focuses, then the neon
+// REPTILIFT title ignites over it (sign flicker) and settles (~3.2s). All motion is CSS
+// @keyframes keyed off `.intro.go` (styles.css); introTimers() just toggles classes +
+// times a guarded hand-off (7s safety net). playIntro() (settings) clones #intro to replay.
 // v3.28 makes ACHIEVEMENTS tiered: each badge levels up through escalating thresholds
 // with fun names (e.g. lifetime volume One Ton → Rhino → … → Blue Whale → Space Shuttle).
 // reptilift_achievements stores { levels: {id: highestLevelReached}, dates: {id: date} };
@@ -3869,385 +3869,60 @@ function maybeShowOnboarding() {
 })();
 
 // ===== startup animation =====
-// Self-contained cinematic, drawn in code (no raster assets). Claw-tear gashes rake
-// across the scaly surface in one swipe (flash + shake), the eye tears open (eyelid
-// morph + iris/pupil/spec reveal), it holds, then the neon REPTILIFT title builds in
-// last as everything else fades to black with lightning + a burst flash. Driven by
-// the Web Animations API + rAF — introTimers() runs it & schedules the app hand-off;
-// playIntro() (settings "replay intro") fully resets and replays from the start.
+// Simple, robust, image-driven splash. Two real photos (intro-claws.png ->
+// intro-eye.png) crossfade, then the neon REPTILIFT title ignites over the eye. ALL
+// motion is CSS @keyframes keyed off `.intro.go` (see styles.css) — there is no JS
+// animation engine. introTimers() just adds `.go` to start it and schedules a guarded,
+// idempotent hand-off to the app (with a hard safety net); playIntro() (settings
+// "replay intro") clones #intro, strips the run classes, and restarts cleanly.
 const appEl = document.getElementById("app");
 
-const INTRO = (function () {
-  const stage = document.getElementById("intro");
-  if (!stage) return null;
-  const $ = (sel) => stage.querySelector(sel);
-  const reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-
-  const skin = $(".ix-skin");
-  const eyeSvg = $(".ix-eyeSvg");
-  const tears = $("#ixTears");
-  const sweepRect = $("#ixSweepRect");
-  const lidPath = $("#ixLidPath");
-  const eyeRim = $("#ixEyeRim");
-  const eyeHalo = $("#ixEyeHalo");
-  const iris = $("#ixIris");
-  const pupil = $("#ixPupil");
-  const spec = $("#ixSpec");
-  const boltsWrap = $(".ix-bolts");
-  const logo = $(".ix-logo");
-  const burst = $(".ix-burst");
-  const flash = $(".ix-flash");
-
-  const CX = 200, CY = 200;
-  // eyelid clip morphs from a thin slit (closed) to a full almond (open)
-  const LID_CLOSED = "M104 200 Q200 196 296 200 Q200 204 104 200 Z";
-  const LID_OPEN   = "M96 200 Q200 92 304 200 Q200 308 96 200 Z";
-  const RIM_OPEN   = "M96 200 Q200 96 304 200 Q200 304 96 200 Z";
-
-  let timers = [];   // setTimeout handles for the current run
-  let raf = [];      // requestAnimationFrame handles for in-flight tweens
-  let embers = [];   // dynamically-created ember nodes (cleared on reset)
-  let bolts = [];    // the 7 lightning bolt nodes
-
-  function clearTimers() {
-    timers.forEach(clearTimeout); timers = [];
-    raf.forEach(cancelAnimationFrame); raf = [];
-  }
-  function after(ms, fn) { timers.push(window.setTimeout(fn, ms)); }
-
-  // build the claw rake — ~4 parallel DIAGONAL slashes (upper-left → lower-right),
-  // each a TAPERED molten GASH (marquise/leaf polygon, pointed at both ends, widest
-  // in the middle) layered for the ripped-open-then-glowing look: dark torn edge →
-  // bright green glow fill → hot near-white core, with a few jagged crack tendrils
-  // branching off. All live in #ixTears (filter:url(#ixTear) tears the edges) and are
-  // revealed at once by the rotated sweep clip. The #ixBlur glow filter pours green
-  // light out of the cracks.
-  const SVGNS = "http://www.w3.org/2000/svg";
-  function mk(tag, attrs) {
-    const el = document.createElementNS(SVGNS, tag);
-    for (const k in attrs) el.setAttribute(k, attrs[k]);
-    return el;
-  }
-
-  // a tapered gash polygon: pointed tips at (x0,y0) & (x1,y1), bulging to half-width
-  // `w` at the middle. `wob` adds a touch of jagged asymmetry to the two long edges.
-  function gashPath(x0, y0, x1, y1, w, wob) {
-    const dx = x1 - x0, dy = y1 - y0;
-    const len = Math.hypot(dx, dy) || 1;
-    // unit normal (perpendicular to the slash direction)
-    const nx = -dy / len, ny = dx / len;
-    const segs = 16;
-    const top = [], bot = [];
-    for (let s = 0; s <= segs; s++) {
-      const t = s / segs;
-      const cx = x0 + dx * t, cy = y0 + dy * t;
-      // half-width profile: sine bulge -> pointed at both ends, fat in the middle
-      const prof = Math.sin(Math.PI * t);
-      const hw = w * (prof * prof * 0.6 + prof * 0.4);
-      const jt = (Math.sin(t * 9 + wob) * 0.9 + Math.sin(t * 23 + wob) * 0.4) * prof;
-      const jb = (Math.sin(t * 8 - wob) * 0.9 + Math.sin(t * 21 - wob) * 0.4) * prof;
-      top.push([cx + nx * (hw + jt), cy + ny * (hw + jt)]);
-      bot.push([cx - nx * (hw + jb), cy - ny * (hw + jb)]);
-    }
-    let d = `M${top[0][0].toFixed(1)} ${top[0][1].toFixed(1)}`;
-    for (let s = 1; s < top.length; s++) d += ` L${top[s][0].toFixed(1)} ${top[s][1].toFixed(1)}`;
-    for (let s = bot.length - 1; s >= 0; s--) d += ` L${bot[s][0].toFixed(1)} ${bot[s][1].toFixed(1)}`;
-    return d + " Z";
-  }
-
-  // a short forked crack tendril branching off a point along the gash
-  function tendrilPath(px, py, ang, len) {
-    const steps = 3;
-    let x = px, y = py, a = ang, d = `M${x.toFixed(1)} ${y.toFixed(1)}`;
-    for (let s = 0; s < steps; s++) {
-      a += (Math.sin(s * 2.3) ) * 0.5;        // zig-zag
-      const seg = len / steps;
-      x += Math.cos(a) * seg; y += Math.sin(a) * seg;
-      d += ` L${x.toFixed(1)} ${y.toFixed(1)}`;
-    }
-    return d;
-  }
-
-  function buildTears() {
-    tears.innerHTML = "";
-    // 4 parallel diagonal slashes raking UL→LR across the central area, varied in
-    // length/offset so it reads as a claw rake (not a grid). [x0,y0,x1,y1,halfWidth]
-    const slashes = [
-      [78, 92, 300, 250, 11],
-      [110, 70, 322, 232, 14],
-      [142, 96, 330, 270, 12],
-      [176, 120, 318, 300, 9],
-    ];
-    slashes.forEach((s, i) => {
-      const [x0, y0, x1, y1, w] = s;
-      const wob = i * 1.7 + 0.6;
-      const dxn = (x1 - x0), dyn = (y1 - y0);
-      const len = Math.hypot(dxn, dyn) || 1;
-      const ux = dxn / len, uy = dyn / len;     // along-slash unit
-      const nx = -uy, ny = ux;                  // normal unit
-
-      // crack tendrils first (sit beneath the gash), branching from a few points
-      const tg = mk("g", {});
-      const branchAt = [0.32, 0.6, 0.78];
-      branchAt.forEach((t, k) => {
-        const bx = x0 + dxn * t, by = y0 + dyn * t;
-        const side = (k % 2 === 0) ? 1 : -1;
-        const baseAng = Math.atan2(ny * side, nx * side);
-        const tl = 14 + ((i + k) % 3) * 5;
-        const td = tendrilPath(bx + nx * side * (w * 0.5), by + ny * side * (w * 0.5),
-                               baseAng + (k - 1) * 0.35, tl);
-        // dark crack channel
-        tg.appendChild(mk("path", { d: td, fill: "none", stroke: "#04070a", "stroke-width": "3", "stroke-linecap": "round" }));
-        // green-lit crack
-        tg.appendChild(mk("path", { d: td, fill: "none", stroke: "#7bd11a", "stroke-width": "1.2", "stroke-linecap": "round", opacity: "0.8", filter: "url(#ixBlur)" }));
-      });
-      tears.appendChild(tg);
-
-      // 1) dark torn outline — the ripped scaly edge (slightly larger)
-      tears.appendChild(mk("path", { d: gashPath(x0, y0, x1, y1, w + 2.5, wob), fill: "#04070a" }));
-      // 2) bright green glowing fill — green light pours out of the crack
-      tears.appendChild(mk("path", { d: gashPath(x0, y0, x1, y1, w, wob), fill: "#7bd11a", filter: "url(#ixBlur)", opacity: "0.95" }));
-      // 2b) a crisper inner green (no blur) so the gash edge stays defined
-      tears.appendChild(mk("path", { d: gashPath(x0, y0, x1, y1, w - 2.5, wob + 0.4), fill: "#a3e635" }));
-      // 3) hot near-white core down the center, thin
-      tears.appendChild(mk("path", { d: gashPath(x0 + ux * 6, y0 + uy * 6, x1 - ux * 6, y1 - uy * 6, w * 0.34, wob + 1.1), fill: "#eaffbf" }));
-    });
-  }
-
-  function setLid(d) { lidPath.setAttribute("d", d); }
-
-  // generic eased tween on a numeric property via rAF
-  function tween(ms, fn, done) {
-    const t0 = performance.now();
-    function step(now) {
-      let k = Math.min(1, (now - t0) / ms);
-      const e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;  // easeInOutQuad
-      fn(e);
-      if (k < 1) raf.push(requestAnimationFrame(step));
-      else if (done) done();
-    }
-    raf.push(requestAnimationFrame(step));
-  }
-
-  // morph the eyelid + rim from closed slit to open almond
-  function openLid(ms) {
-    // parse the two almond curves and lerp their control points
-    const closed = [104, 200, 200, 196, 296, 200, 200, 204];
-    const open   = [96, 200, 200, 92, 304, 200, 200, 308];
-    eyeRim.setAttribute("d", RIM_OPEN);
-    tween(ms, (e) => {
-      const p = closed.map((c, i) => c + (open[i] - c) * e);
-      setLid(`M${p[0]} ${p[1]} Q${p[2]} ${p[3]} ${p[4]} ${p[5]} Q${p[6]} ${p[7]} ${p[0]} ${p[1]} Z`);
-      eyeRim.setAttribute("stroke-width", String(3 * e));
-      eyeRim.setAttribute("opacity", String(0.9 * e));
-    });
-  }
-
-  // widen the rotated sweep rect so all tears are revealed in one diagonal swipe
-  function revealSweep(ms) {
-    tween(ms, (e) => {
-      sweepRect.setAttribute("width", String(720 * e));
-    });
-  }
-
-  function anim(el, frames, opts) {
-    if (!el || !el.animate) return null;
-    return el.animate(frames, Object.assign({ fill: "forwards", easing: "ease" }, opts));
-  }
-
-  function flashHit(peak, ms) {
-    anim(flash, [{ opacity: 0 }, { opacity: peak }, { opacity: 0 }], { duration: ms });
-  }
-
-  function shake(ms) {
-    if (reduce) return;
-    anim(eyeSvg, [
-      { transform: "translate(0,0)" },
-      { transform: "translate(-10px,6px)" },
-      { transform: "translate(8px,-6px)" },
-      { transform: "translate(-5px,3px)" },
-      { transform: "translate(0,0)" },
-    ], { duration: ms });
-  }
-
-  function spawnEmbers() {
-    for (let i = 0; i < 18; i++) {
-      const e = document.createElement("div");
-      e.className = "ix-ember";
-      stage.appendChild(e);
-      embers.push(e);
-      const ang = Math.random() * Math.PI * 2;
-      const dist = 120 + Math.random() * 220;
-      e.style.left = "50%"; e.style.top = "50%";
-      anim(e, [
-        { transform: "translate(-50%,-50%) scale(1)", opacity: 1 },
-        { transform: `translate(calc(-50% + ${Math.cos(ang) * dist}px), calc(-50% + ${Math.sin(ang) * dist}px)) scale(0)`, opacity: 0 },
-      ], { duration: 900 + Math.random() * 500, delay: 4300 + Math.random() * 300, easing: "ease-out" });
-    }
-  }
-
-  function buildBolts() {
-    boltsWrap.innerHTML = "";
-    bolts = [];
-    for (let i = 0; i < 7; i++) {
-      const b = document.createElement("div");
-      b.className = "ix-bolt";
-      b.style.transform = `translate(-50%,0) rotate(${(360 / 7) * i + 12}deg)`;
-      boltsWrap.appendChild(b);
-      bolts.push(b);
-    }
-  }
-
-  // reset every node back to its pre-roll state so a replay is clean
-  function reset() {
-    clearTimers();
-    embers.forEach((e) => e.remove()); embers = [];
-    stage.classList.remove("hide");
-    stage.style.display = "flex";
-    eyeSvg.style.transform = "translate(0,0)";
-
-    skin.style.opacity = "0";
-    setLid(LID_CLOSED);
-    eyeRim.setAttribute("d", "");
-    eyeRim.setAttribute("stroke-width", "0");
-    eyeRim.setAttribute("opacity", "0");
-    eyeHalo.setAttribute("opacity", "0");
-    iris.style.opacity = "0";
-    pupil.style.opacity = "0";
-    spec.style.opacity = "0";
-    sweepRect.setAttribute("width", "0");
-    boltsWrap.style.opacity = "0";
-    bolts.forEach((b) => (b.style.opacity = "0"));
-    logo.style.opacity = "0";
-    logo.style.visibility = "hidden";
-    logo.style.transform = "scale(.2)";
-    flash.style.opacity = "0";
-    burst.style.opacity = "0";
-    burst.style.transform = "translate(-50%,-50%) scale(0)";
-
-    buildTears();
-    buildBolts();
-  }
-
-  // run the whole sequence. onSettled() fires once the title has settled (~5s),
-  // which is where the app reveal / hand-off happens.
-  function play(onSettled) {
-    reset();
-
-    if (reduce) {
-      // calm path: no rake/flash. Skin in, eye open, title in, then hand off.
-      skin.style.opacity = "1";
-      iris.style.opacity = "1"; pupil.style.opacity = "1"; spec.style.opacity = "1";
-      sweepRect.setAttribute("width", "0");           // no claw marks
-      setLid(LID_OPEN); eyeRim.setAttribute("d", RIM_OPEN);
-      eyeRim.setAttribute("stroke-width", "3"); eyeRim.setAttribute("opacity", ".9");
-      eyeHalo.setAttribute("opacity", ".9");
-      logo.style.visibility = "visible"; logo.style.transform = "scale(1)"; logo.style.opacity = "1";
-      after(1400, () => { if (onSettled) onSettled(); });
-      return;
-    }
-
-    // skin fades up under everything
-    anim(skin, [{ opacity: 0 }, { opacity: 1 }], { duration: 600 });
-
-    // BEAT 1 (250ms): claws rake across in one swipe + flash + shake
-    after(250, () => {
-      revealSweep(360);
-      flashHit(0.9, 260);
-      shake(380);
-    });
-
-    // BEAT 2 (1700ms): eye tears open — claw marks fade, eyelid+rim open, eye reveals
-    after(1700, () => {
-      anim(tears, [{ opacity: 1 }, { opacity: 0 }], { duration: 700 });
-      openLid(800);
-      anim(iris, [{ opacity: 0 }, { opacity: 1 }], { duration: 700, delay: 150 });
-      anim(pupil, [{ opacity: 0 }, { opacity: 1 }], { duration: 600, delay: 300 });
-      anim(spec, [{ opacity: 0 }, { opacity: 0.9 }], { duration: 500, delay: 400 });
-      anim(eyeHalo, [
-        { opacity: 0 }, { opacity: 0.85 }, { opacity: 0.55 },
-      ], { duration: 900, delay: 250 });
-    });
-
-    // BEAT 3 (3000ms): hold on the glowing eye — a subtle pupil contraction
-    after(3000, () => {
-      anim(pupil, [{ rx: 16 }, { rx: 9 }], { duration: 700 });
-      anim(eyeHalo, [{ opacity: 0.55 }, { opacity: 0.8 }, { opacity: 0.6 }], { duration: 800 });
-    });
-
-    // BEAT 4 (3800ms): title builds in last as everything else fades to black
-    after(3800, () => {
-      anim(eyeSvg, [{ opacity: 1 }, { opacity: 0 }], { duration: 900 });
-      anim(skin, [{ opacity: 1 }, { opacity: 0 }], { duration: 900 });
-      logo.style.visibility = "visible";
-      anim(logo, [
-        { opacity: 0, transform: "scale(.2)" },
-        { opacity: 1, transform: "scale(1.12)" },
-        { opacity: 1, transform: "scale(1)" },
-      ], { duration: 700 });
-    });
-
-    // (4300ms): lightning bolts + burst + flash punctuate the title landing
-    after(4300, () => {
-      boltsWrap.style.opacity = "1";
-      bolts.forEach((b, i) => {
-        anim(b, [
-          { opacity: 0, transform: b.style.transform + " scaleY(.2)" },
-          { opacity: 1, transform: b.style.transform + " scaleY(1)" },
-          { opacity: 0, transform: b.style.transform + " scaleY(1)" },
-        ], { duration: 500, delay: i * 30 });
-      });
-      anim(burst, [
-        { opacity: 0, transform: "translate(-50%,-50%) scale(0)" },
-        { opacity: 1, transform: "translate(-50%,-50%) scale(1)" },
-        { opacity: 0, transform: "translate(-50%,-50%) scale(2.4)" },
-      ], { duration: 700 });
-      flashHit(0.85, 400);
-      spawnEmbers();
-    });
-
-    // (5000ms): only the title remains, steady — settle a looping glow & hand off
-    after(5000, () => {
-      anim(logo, [
-        { filter: "drop-shadow(0 0 16px rgba(132,204,22,.7))" },
-        { filter: "drop-shadow(0 0 30px rgba(163,230,53,.95))" },
-        { filter: "drop-shadow(0 0 16px rgba(132,204,22,.7))" },
-      ], { duration: 1800, iterations: Infinity });
-      if (onSettled) onSettled();
-    });
-  }
-
-  return { stage, play, reset, reduce };
-})();
+// Drive the CSS splash: add `.go` to start the @keyframes, then run a guarded,
+// idempotent hand-off to the app at ~3200ms (reveal #app, fade the intro, then hide
+// it). A hard 7s safety net guarantees the app reveals even if anything goes wrong —
+// the user must NEVER be stranded on a black screen.
+const REDUCE_MOTION = !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
 
 function introTimers(introEl, firstLoad) {
-  if (!INTRO) return;
-  // hand-off: once the title has settled (~5s; ~1.4s for reduced-motion), fade the
-  // intro out and reveal the app. We don't wait for the looping/replay state.
-  // Idempotent + guarded so the app ALWAYS reveals — a broken animation must never
-  // strand the user on a black intro.
+  if (!introEl) { try { if (appEl) appEl.classList.add("ready"); } catch (e) {} return; }
+
+  // kick off the CSS sequence on the next frame so the start state paints first
+  window.setTimeout(() => { try { introEl.classList.add("go"); } catch (e) {} }, 60);
+
   let handed = false;
   const handOff = () => {
     if (handed) return; handed = true;
     try { if (appEl) appEl.classList.add("ready"); } catch (e) {}
-    try { INTRO.stage.classList.add("hide"); } catch (e) {}
+    try { introEl.classList.add("hide"); } catch (e) {}
     window.setTimeout(() => {
-      try { INTRO.stage.style.display = "none"; } catch (e) {}
+      try { introEl.style.display = "none"; } catch (e) {}
       // first load only: offer the onboarding wizard to brand-new users (no-op
       // otherwise). Guarded so it never blocks the app.
       if (firstLoad) { try { maybeShowOnboarding(); } catch (e) {} }
     }, 650);
   };
-  try { INTRO.play(handOff); } catch (e) { handOff(); }   // animation errored → reveal now
-  window.setTimeout(handOff, 7000);                       // hard safety net, regardless
+
+  // reduced motion shows a calm static end state, so hand off quickly
+  window.setTimeout(handOff, REDUCE_MOTION ? 900 : 3200);
+  window.setTimeout(handOff, 7000);   // hard safety net, regardless
 }
+
 (function () {
-  if (INTRO && appEl) introTimers(INTRO.stage, true);
+  const intro = document.getElementById("intro");
+  if (intro && appEl) introTimers(intro, true);
+  else if (appEl) appEl.classList.add("ready");   // no intro node → just show the app
 })();
-// settings "replay intro": fully reset & replay from the start, then hand back to app
+
+// settings "replay intro": clone #intro, strip the run classes, re-insert so the CSS
+// animations restart from frame 0, then hand back to the app cleanly.
 function playIntro() {
-  if (!INTRO) return;
-  introTimers(INTRO.stage, false);
+  const cur = document.getElementById("intro");
+  if (!cur) return;
+  const fresh = cur.cloneNode(true);
+  fresh.classList.remove("go", "hide");
+  fresh.style.display = "";
+  cur.replaceWith(fresh);
+  introTimers(fresh, false);
 }
 const replayBtn = document.getElementById("replayIntro");
 if (replayBtn) replayBtn.addEventListener("click", playIntro);

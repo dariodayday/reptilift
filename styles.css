@@ -23,83 +23,108 @@
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
-/* ===== startup splash: a self-contained cinematic, drawn entirely in code =====
-   JS-driven (Web Animations API + rAF) from script.js (introTimers/playIntro).
-   Beats: (1) claw-tear gashes rake across in one swipe + flash + shake, (2) the eye
-   tears open (eyelid morph + iris/pupil/spec reveal, claw marks fade), (3) hold on
-   the glowing eye, (4) the neon REPTILIFT title builds in last as everything else
-   fades to black, with lightning bolts + burst + flash. No raster assets.
-   ALL selectors are scoped under #intro so nothing leaks into the app — in
-   particular there is NO global html/body/font override here (the app keeps its
-   own fonts + scrolling). The title's Arial-Black font is scoped to .ix-logo. */
+/* ===== startup splash: a simple, robust, image-driven cinematic =====
+   Two real photos + the neon title, sequenced entirely with CSS @keyframes that run
+   when script.js adds `.intro.go`. Beats (~3.2s total):
+     1) 0–0.7s  claws photo flares in (scale punch) + a white IMPACT FLASH
+     2) 1.0–2.0s crossfade claws -> eye photo, eye slowly zooms/focuses in
+     3) 1.9–2.8s neon REPTILIFT title IGNITES over the eye (sign flicker + small flash)
+     4) 2.8–3.2s settle, then `.intro.hide` fades the whole splash into the app
+   ALL selectors are scoped under #intro so nothing leaks into the app — there is NO
+   global html/body/font override here. The title's Bungee neon look matches `.brand`. */
 .intro {
   position: fixed; inset: 0; z-index: 6000;          /* above the auth gate so the intro always plays on top */
-  display: flex; align-items: center; justify-content: center;
-  overflow: hidden; background: #000;
+  overflow: hidden; background: #050706;
   transition: opacity .6s ease;
 }
 .intro.hide { opacity: 0; pointer-events: none; }
 
-/* scaly green-on-black surface that pulses behind the eye */
-#intro .ix-skin {
-  position: absolute; inset: 0; opacity: 0; pointer-events: none;
-  background:
-    radial-gradient(circle at 50% 50%, rgba(30,46,10,.5), transparent 65%),
-    repeating-radial-gradient(circle at 50% 50%, #0a0f06 0 9px, #050803 9px 18px);
+/* both photos sit centered, stacked, contained; animate only once `.go` is set */
+#intro .introClaws,
+#intro .introEye {
+  position: absolute; left: 50%; top: 50%;
+  width: clamp(300px, 88vw, 520px); height: clamp(300px, 88vw, 520px);
+  object-fit: contain; pointer-events: none;
+  transform: translate(-50%, -50%); opacity: 0;
+}
+#intro .introClaws { z-index: 2; }
+#intro .introEye { z-index: 1; }
+
+/* the neon REPTILIFT title, centered over the eye — same Bungee neon look as .brand */
+#intro .introTitle {
+  position: absolute; left: 50%; top: 50%; z-index: 4;
+  transform: translate(-50%, -50%);
+  margin: 0; white-space: nowrap; pointer-events: none;
+  font-family: "Bungee", var(--font-display);
+  font-size: clamp(30px, 11vw, 72px); line-height: 1; letter-spacing: 1px;
+  color: #c7ff5e;
+  text-shadow: 0 0 6px #aaff3c, 0 0 15px #7fe22a, 0 0 30px rgba(120,255,60,.65), 0 0 54px rgba(80,200,40,.45);
+  opacity: 0;
 }
 
-#intro .ix-eyeSvg {
-  position: absolute; width: min(88vw, 700px); height: min(88vw, 700px);
-  overflow: visible; pointer-events: none;
-}
-#intro .ix-tglow { filter: url(#ixBlur); }
-#intro #ixIris { opacity: 0; }
-#intro #ixPupil { opacity: 0; }
-#intro #ixSpec { opacity: 0; }
-
-/* the neon-green REPTILIFT wordmark — title font scoped here only */
-#intro .ix-logo {
-  position: relative; z-index: 5;
-  font-family: "Arial Black", Impact, sans-serif;
-  font-size: clamp(40px, 13vw, 168px); letter-spacing: .04em; font-weight: 900;
-  opacity: 0; visibility: hidden; transform: scale(.2);
-  background: linear-gradient(180deg, #e9ffb0 0%, #a3e635 45%, #5c8a12 100%);
-  -webkit-background-clip: text; background-clip: text;
-  -webkit-text-fill-color: transparent;
-  text-shadow: 0 0 2px #f0ffd0, 0 0 14px #a3e635, 0 4px 0 #3f5e0a, 0 8px 18px rgba(0,0,0,.9);
-  filter: drop-shadow(0 0 16px rgba(132,204,22,.7));
+/* full-screen white overlay that briefly pulses on claw impact + title ignite */
+#intro .introFlash {
+  position: absolute; inset: 0; z-index: 5; background: #eaffbf;
+  opacity: 0; pointer-events: none;
 }
 
-#intro .ix-bolts { position: absolute; inset: 0; z-index: 4; opacity: 0; pointer-events: none; }
-#intro .ix-bolt {
-  position: absolute; left: 50%; top: 50%; width: 3px; height: 38%;
-  background: linear-gradient(#d9f99d, #a3e635, transparent);
-  box-shadow: 0 0 12px #a3e635; transform-origin: top center; opacity: 0;
+/* ---- the sequence: only runs once `.go` is added ---- */
+#intro.go .introClaws { animation: introClaws 3.2s ease forwards; }
+#intro.go .introEye { animation: introEye 3.2s ease forwards; }
+#intro.go .introTitle { animation: introTitle 3.2s ease forwards; }
+#intro.go .introFlash { animation: introFlash 3.2s ease forwards; }
+
+/* 1) flare in with a scale punch + green glow, hold, then crossfade out (1.0–2.0s) */
+@keyframes introClaws {
+  0%   { opacity: 0; transform: translate(-50%, -50%) scale(1.12); filter: drop-shadow(0 0 0 rgba(120,255,60,0)); }
+  8%   { opacity: 1; transform: translate(-50%, -50%) scale(1.04); }
+  22%  { opacity: 1; transform: translate(-50%, -50%) scale(1); filter: drop-shadow(0 0 18px rgba(120,255,60,.55)); }
+  31%  { opacity: 1; }
+  62%  { opacity: 0; transform: translate(-50%, -50%) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(1); }
 }
 
-#intro .ix-burst {
-  position: absolute; left: 50%; top: 50%; width: 8px; height: 8px; border-radius: 50%;
-  background: #f7ffd9;
-  box-shadow: 0 0 40px 20px #d9f99d, 0 0 90px 50px rgba(163,230,53,.7);
-  transform: translate(-50%, -50%) scale(0); opacity: 0; z-index: 6;
+/* 2) emerge from the slashes: fade in while zooming 1.15 -> 1.0, then stay (glow) */
+@keyframes introEye {
+  0%   { opacity: 0; transform: translate(-50%, -50%) scale(1.15); }
+  31%  { opacity: 0; transform: translate(-50%, -50%) scale(1.15); }
+  62%  { opacity: 1; transform: translate(-50%, -50%) scale(1.03); }
+  78%  { opacity: 1; transform: translate(-50%, -50%) scale(1); filter: drop-shadow(0 0 22px rgba(120,255,60,.45)); }
+  100% { opacity: 1; transform: translate(-50%, -50%) scale(1); filter: drop-shadow(0 0 22px rgba(120,255,60,.45)); }
 }
 
-#intro .ix-ember {
-  position: absolute; width: 3px; height: 3px; background: #bef264; border-radius: 50%;
-  box-shadow: 0 0 8px #a3e635; opacity: 0;
+/* 3) neon-sign ignite over the eye: a couple of quick flickers, then steady (1.9–2.8s) */
+@keyframes introTitle {
+  0%,58% { opacity: 0; }
+  60%  { opacity: 1; }   /* flick on */
+  63%  { opacity: 0; }
+  66%  { opacity: 1; }
+  69%  { opacity: .35; } /* flicker */
+  72%  { opacity: 1; }   /* steady */
+  100% { opacity: 1; }
 }
 
-#intro .ix-flash {
-  position: absolute; inset: 0; background: #eaffbf; opacity: 0; z-index: 7; pointer-events: none;
+/* white pulses: claw impact (~0.1s) + a softer pulse on title ignite (~1.9s) */
+@keyframes introFlash {
+  0%   { opacity: 0; }
+  3%   { opacity: .85; } /* claw impact */
+  12%  { opacity: 0; }
+  59%  { opacity: 0; }
+  61%  { opacity: .4; }  /* title ignite */
+  68%  { opacity: 0; }
+  100% { opacity: 0; }
 }
 
 #app { opacity: 0; transition: opacity 1s ease; }
 #app.ready { opacity: 1; }
 
-/* reduced motion: skip the seizure-y sweep/flash; the JS shows a calm settled
-   title + glowing eye briefly, then hands off. Keep #app reveal instant. */
+/* reduced motion: skip all flashing/zoom. Show a calm static end state (eye + lit
+   title, no claws, no flash); script.js hands off quickly. #app reveal is instant. */
 @media (prefers-reduced-motion: reduce) {
-  #intro .ix-flash { display: none; }
+  #intro .introClaws { display: none; }
+  #intro .introFlash { display: none; }
+  #intro.go .introEye { animation: none; opacity: 1; filter: drop-shadow(0 0 22px rgba(120,255,60,.45)); }
+  #intro.go .introTitle { animation: none; opacity: 1; }
   #app { opacity: 1; transition: none; }
 }
 
