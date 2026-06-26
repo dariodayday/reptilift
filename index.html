@@ -16,64 +16,52 @@
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <!-- STARTUP SPLASH: a cinematic one-shot — the dark surface fractures with green
-       light (SVG cracks draw on), a real reptile eye opens from the dark, the neon
-       REPTILIFT wordmark ignites, electric lightning bursts, then it all settles and
-       fades into the app. One blended ~3.5s motion, all keyed off `.intro.go` so the
-       JS choreography (introTimers + replay) just adds/removes classes. The eye is the
-       only raster (intro-eye.png); cracks, lightning, glows & title are vector/CSS. -->
+  <!-- STARTUP SPLASH: a self-contained, code-drawn cinematic. Claw-tear gashes rake
+       across a scaly surface in one swipe, a glowing reptile eye tears open (eyelid
+       morph + iris/pupil/spec reveal), it holds, then the neon-green REPTILIFT title
+       builds in last as everything else fades to black, with lightning bolts + a burst
+       flash. JS-driven (Web Animations API + rAF) via introTimers()/playIntro(); see
+       script.js. No raster assets — eye, claw marks, bolts & title are all SVG/CSS. -->
   <div id="intro" class="intro">
-    <div class="intro-stage">
-      <!-- soft green bloom behind everything -->
-      <div class="intro-bloom" aria-hidden="true"></div>
+    <div class="ix-skin" aria-hidden="true"></div>
 
-      <!-- PHASE 1: glowing cracks crawl out of the dark (drawn as SVG, animated via dashoffset) -->
-      <svg class="intro-cracks" viewBox="0 0 800 800" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
-        <defs>
-          <filter id="crackGlow" x="-40%" y="-40%" width="180%" height="180%">
-            <feGaussianBlur stdDeviation="4" result="b" />
-            <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
-          </filter>
-        </defs>
-        <g filter="url(#crackGlow)" fill="none" stroke="#9dff4a" stroke-width="2.4" stroke-linecap="round">
-          <path class="crack c1" d="M400 400 L300 250 L210 190 L150 90" />
-          <path class="crack c2" d="M400 400 L520 270 L600 210 L690 120" />
-          <path class="crack c3" d="M400 400 L300 540 L240 620 L160 710" />
-          <path class="crack c4" d="M400 400 L540 540 L610 600 L700 690" />
-          <path class="crack c5" d="M400 400 L250 410 L120 380" />
-          <path class="crack c6" d="M400 400 L560 410 L700 440" />
-          <path class="crack c7" d="M300 250 L250 200 M520 270 L580 240 M300 540 L250 580 M540 540 L600 580" stroke-width="1.6" />
-        </g>
-      </svg>
+    <svg class="ix-eyeSvg" viewBox="0 0 400 400" aria-hidden="true">
+      <defs>
+        <filter id="ixBlur" x="-50%" y="-50%" width="200%" height="200%">
+          <feGaussianBlur stdDeviation="3" />
+        </filter>
+        <filter id="ixTear">
+          <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" seed="7" result="n" />
+          <feDisplacementMap in="SourceGraphic" in2="n" scale="6" />
+        </filter>
+        <radialGradient id="ixIrisGrad" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stop-color="#f0ffd0" />
+          <stop offset="22%" stop-color="#d9f99d" />
+          <stop offset="55%" stop-color="#a3e635" />
+          <stop offset="100%" stop-color="#3f5e0a" />
+        </radialGradient>
+        <radialGradient id="ixHalo" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stop-color="rgba(163,230,53,.9)" />
+          <stop offset="60%" stop-color="rgba(132,204,22,.35)" />
+          <stop offset="100%" stop-color="rgba(0,0,0,0)" />
+        </radialGradient>
+        <clipPath id="ixLid"><path id="ixLidPath" d="" /></clipPath>
+        <clipPath id="ixSweep"><rect id="ixSweepRect" x="-260" y="160" width="0" height="120" transform="rotate(-18 200 200)" /></clipPath>
+      </defs>
+      <circle id="ixEyeHalo" cx="200" cy="200" r="150" fill="url(#ixHalo)" opacity="0" />
+      <g clip-path="url(#ixLid)">
+        <circle id="ixIris" cx="200" cy="200" r="92" fill="url(#ixIrisGrad)" />
+        <ellipse id="ixPupil" cx="200" cy="200" rx="16" ry="80" fill="#0a0f06" />
+        <circle id="ixSpec" cx="172" cy="168" r="14" fill="#f7ffd9" opacity=".9" />
+        <path id="ixEyeRim" d="" fill="none" stroke="#a3e635" stroke-width="0" opacity="0" />
+      </g>
+      <g id="ixTears" filter="url(#ixTear)" clip-path="url(#ixSweep)"></g>
+    </svg>
 
-      <!-- PHASE 2: the hero eye emerges from the dark (fade + zoom) -->
-      <div class="intro-eyewrap" aria-hidden="true">
-        <img class="intro-eye" src="intro-eye.png" alt="" width="340" height="318" />
-      </div>
-
-      <!-- PHASE 4: electric lightning bursts radiating from behind the title -->
-      <svg class="intro-bolts" viewBox="0 0 800 800" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
-        <defs>
-          <filter id="boltGlow" x="-60%" y="-60%" width="220%" height="220%">
-            <feGaussianBlur stdDeviation="5" result="b" />
-            <feMerge><feMergeNode in="b" /><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
-          </filter>
-        </defs>
-        <g filter="url(#boltGlow)" fill="none" stroke="#c7ff5e" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
-          <path class="bolt b1" d="M400 380 L340 300 L370 280 L300 180 L330 165 L250 60" />
-          <path class="bolt b1b" d="M340 300 L290 290 M300 180 L255 195" stroke-width="2" />
-          <path class="bolt b2" d="M400 380 L470 300 L440 280 L520 180 L490 165 L580 60" />
-          <path class="bolt b2b" d="M470 300 L520 295 M520 180 L565 195" stroke-width="2" />
-          <path class="bolt b3" d="M400 420 L330 500 L365 520 L280 640 L320 655 L230 760" />
-          <path class="bolt b3b" d="M330 500 L285 510 M280 640 L240 625" stroke-width="2" />
-          <path class="bolt b4" d="M400 420 L480 500 L445 520 L540 640 L500 655 L600 760" />
-          <path class="bolt b4b" d="M480 500 L525 510 M540 640 L580 625" stroke-width="2" />
-        </g>
-      </svg>
-
-      <!-- PHASE 3 + 5: the neon-lime REPTILIFT wordmark ignites then sits steady -->
-      <h1 class="intro-mark">REPTILIFT</h1>
-    </div>
+    <div class="ix-bolts" aria-hidden="true"></div>
+    <h1 class="ix-logo">REPTILIFT</h1>
+    <div class="ix-burst" aria-hidden="true"></div>
+    <div class="ix-flash" aria-hidden="true"></div>
   </div>
 
   <div id="app">
@@ -583,7 +571,7 @@
     </section>
 
     <footer class="footer">
-      Reptilift v9.49 — rough cut
+      Reptilift v9.50 — rough cut
       <button id="replayIntro" class="replay">↻ replay intro</button>
     </footer>
 
