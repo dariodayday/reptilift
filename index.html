@@ -23,10 +23,7 @@
        off `.intro.go`; script.js (introTimers/playIntro) only toggles classes + times
        the hand-off, so it's robust and never strands the user on a black screen. -->
   <div id="intro" class="intro">
-    <img class="introClaws" src="intro-claws.png" alt="" aria-hidden="true" />
-    <img class="introEye" src="intro-eye.png" alt="" aria-hidden="true" />
-    <h1 class="introTitle">REPTILIFT</h1>
-    <div class="introFlash" aria-hidden="true"></div>
+    <video id="introVid" class="introVid" src="intro.mp4" muted playsinline autoplay preload="auto" aria-hidden="true"></video>
   </div>
 
   <div id="app">
@@ -536,7 +533,7 @@
     </section>
 
     <footer class="footer">
-      Reptilift v9.52 — rough cut
+      Reptilift v9.53 — rough cut
       <button id="replayIntro" class="replay">↻ replay intro</button>
     </footer>
 

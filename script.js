@@ -1,4 +1,4 @@
-// Reptilift v3.44 — earn your beast rank per exercise from your MMR.
+// Reptilift v3.45 — earn your beast rank per exercise from your MMR.
 // v3.44 rebuilds the startup splash as a simple, robust, image-driven sequence: the
 // glowing claw-slash photo (intro-claws.png) flares in with an impact flash, crossfades
 // into the reptile-eye photo (intro-eye.png) which zooms/focuses, then the neon
@@ -3886,9 +3886,8 @@ const REDUCE_MOTION = !!(window.matchMedia && window.matchMedia("(prefers-reduce
 function introTimers(introEl, firstLoad) {
   if (!introEl) { try { if (appEl) appEl.classList.add("ready"); } catch (e) {} return; }
 
-  // kick off the CSS sequence on the next frame so the start state paints first
-  window.setTimeout(() => { try { introEl.classList.add("go"); } catch (e) {} }, 60);
-
+  // Idempotent + guarded hand-off: fade the intro out and reveal the app. A broken
+  // or autoplay-blocked video must NEVER strand the user on a black screen.
   let handed = false;
   const handOff = () => {
     if (handed) return; handed = true;
@@ -3896,15 +3895,28 @@ function introTimers(introEl, firstLoad) {
     try { introEl.classList.add("hide"); } catch (e) {}
     window.setTimeout(() => {
       try { introEl.style.display = "none"; } catch (e) {}
-      // first load only: offer the onboarding wizard to brand-new users (no-op
-      // otherwise). Guarded so it never blocks the app.
+      try { const v = introEl.querySelector("video"); if (v) v.pause(); } catch (e) {}
+      // first load only: offer the onboarding wizard to brand-new users (no-op otherwise).
       if (firstLoad) { try { maybeShowOnboarding(); } catch (e) {} }
     }, 650);
   };
 
-  // reduced motion shows a calm static end state, so hand off quickly
-  window.setTimeout(handOff, REDUCE_MOTION ? 900 : 3200);
-  window.setTimeout(handOff, 7000);   // hard safety net, regardless
+  const vid = introEl.querySelector("video");
+  if (REDUCE_MOTION) {                       // skip the motion — hand off quickly
+    try { if (vid) vid.pause(); } catch (e) {}
+    window.setTimeout(handOff, 600);
+  } else if (vid) {
+    try { vid.currentTime = 0; } catch (e) {}
+    try { vid.addEventListener("ended", handOff, { once: true }); } catch (e) {}
+    try {
+      const p = vid.play();
+      if (p && p.catch) p.catch(() => { window.setTimeout(handOff, 1200); });   // autoplay blocked → don't get stuck
+    } catch (e) { window.setTimeout(handOff, 1200); }
+    window.setTimeout(handOff, 6000);        // a beat past the ~5s clip, in case 'ended' never fires
+  } else {
+    window.setTimeout(handOff, 3000);
+  }
+  window.setTimeout(handOff, 8000);          // hard safety net, regardless
 }
 
 (function () {
