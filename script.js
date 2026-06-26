@@ -1,4 +1,4 @@
-// Reptilift v3.37 — earn your beast rank per exercise from your MMR.
+// Reptilift v3.38 — earn your beast rank per exercise from your MMR.
 // v3.31 rebuilds the startup splash: two soft-glowing CSS reptile eyes in the dark,
 // then the gradient REPTILIFT wordmark (matching the home .brand) fades in, total ~2.3s.
 // v3.28 makes ACHIEVEMENTS tiered: each badge levels up through escalating thresholds

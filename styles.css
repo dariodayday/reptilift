@@ -32,82 +32,78 @@
 }
 .intro.hide { opacity: 0; pointer-events: none; }
 
-/* eye + logo stacked/overlapping, both centered */
+/* eye sits ABOVE the wordmark so the fierce hunter eye stays fully visible
+   even after the big logo reveals (logo no longer covers it). */
 .splash { position: relative; display: grid; place-items: center; }
 
-/* the eye */
-.eyewrap { position: relative; width: clamp(150px, 38vw, 210px); aspect-ratio: 1; }
-.eyewrap::before {                       /* soft glow bloom behind the eye */
-  content: ""; position: absolute; inset: -45%; border-radius: 50%; opacity: 0;
-  background: radial-gradient(circle, rgba(150,255,60,.28) 0%, rgba(120,210,50,.12) 42%, transparent 70%);
-}
-.iris {
-  position: absolute; inset: 0; border-radius: 50%; transform-origin: center; overflow: hidden;
-  transform: scaleY(.04); opacity: 0;
-  background:
-    /* fine radiating fibres — gives the iris real texture, not a flat gradient */
-    repeating-conic-gradient(from 0deg at 50% 44%,
-      rgba(255,248,205,.13) 0deg 1deg, rgba(10,32,4,.20) 1deg 2.2deg),
-    /* colour + depth: hot amber centre → green body → dark limbal ring at the rim */
-    radial-gradient(circle at 50% 44%,
-      #fffdf0 4%, #ffe488 11%, #d7e646 24%, #8fc62e 41%, #4d971f 60%, #245c12 80%, rgba(7,24,4,.95) 92%, transparent 100%);
-  box-shadow: inset 0 0 16px 3px rgba(0,0,0,.4);   /* shading toward the rim for a domed look */
-}
-.iris::after {                                      /* soft wet cornea reflection across the top */
-  content: ""; position: absolute; left: 8%; top: 6%; width: 84%; height: 46%; border-radius: 50%;
-  background: radial-gradient(ellipse at 50% 0%, rgba(255,255,255,.28), transparent 62%);
-  pointer-events: none;
-}
-.pupil {
-  position: absolute; left: 50%; top: 50%; width: 25%; height: 84%; border-radius: 50%; opacity: 0;
-  background: radial-gradient(ellipse at 50% 38%, #08180b 0%, #000 58%);
-  box-shadow: inset 0 0 5px 1px rgba(0,0,0,.75), 0 0 8px 2px rgba(150,255,70,.3);  /* deep slit + faint glow where the iris meets it */
-  transform: translate(-50%, -50%) scale(2.4, .04); z-index: 2;
-}
-.glint {
-  position: absolute; left: 35%; top: 25%; width: 17%; height: 17%; border-radius: 50%; opacity: 0; z-index: 3;
-  background: radial-gradient(circle at 42% 38%, #fff 0%, rgba(255,255,255,.75) 32%, transparent 68%);
-}
-.glint::after {                                     /* tiny secondary catchlight for realism */
-  content: ""; position: absolute; left: 135%; top: 150%; width: 42%; height: 42%; border-radius: 50%;
-  background: radial-gradient(circle, #fff 0%, transparent 70%); opacity: .65;
+/* the eye — inline SVG hunter eye (almond aperture, slit pupil, fibred iris) */
+.huntereye {
+  position: relative; display: block;
+  width: clamp(190px, 60vw, 340px); height: auto;
+  overflow: visible;
+  filter: drop-shadow(0 0 22px rgba(120,230,70,.35));
 }
 
-/* the OLD scaly REPTILIFT logo (transparent png), revealed centered IN the eye */
+/* resting (pre-.go) state: lids shut, pupil wide, glints hidden.
+   scaleY collapses the almond vertically so the lids "part" on open.
+   transform-box:view-box keeps transform-origin in viewBox (user) coords. */
+.huntereye * { transform-box: view-box; }
+.he-eye   { transform: scaleY(.03); transform-origin: 110px 70px; opacity: .2; }
+.he-bloom { opacity: 0; transform-origin: 110px 70px; }
+.he-rim, .he-rim2 { transform: scaleY(.03); transform-origin: 110px 70px; }
+.he-pupil, .he-pupil-rim {
+  transform: scaleX(2.6) scaleY(.4); transform-origin: 110px 70px;   /* dilated, almost round */
+}
+.he-glint  { opacity: 0; transform-origin: 88px 50px; }
+.he-glint2 { opacity: 0; transform-origin: 128px 86px; }
+.he-iris { transform: scale(.6); transform-origin: 110px 70px; }
+
+/* the scaly REPTILIFT wordmark — revealed BELOW the eye (centered horizontally)
+   so the hunter eye stays in view above it. */
 .intro-mark {
-  position: absolute; left: 50%; top: 50%; z-index: 4;
-  width: clamp(320px, 90vw, 560px); height: auto; pointer-events: none;
-  transform: translate(-50%, -50%) scale(.9); opacity: 0;
+  position: absolute; left: 50%; top: 100%; z-index: 4;
+  width: clamp(260px, 78vw, 460px); height: auto; pointer-events: none;
+  transform: translate(-50%, 4%) scale(.9); opacity: 0;
   filter: drop-shadow(0 2px 8px rgba(0,0,0,.55)) drop-shadow(0 0 18px rgba(47,174,107,.45));
 }
 
-/* choreography — runs once .go is added */
-.intro.go .eyewrap { filter: drop-shadow(0 0 18px rgba(150,255,60,.4)); }
-.intro.go .eyewrap::before { animation: eyeBloom 2.6s ease-in-out .2s both; }
-.intro.go .iris  { animation: irisOpen .75s cubic-bezier(.2,.9,.3,1) .15s forwards; }
-.intro.go .pupil { animation: pupilOpen .9s cubic-bezier(.3,.85,.3,1) .55s forwards; }
-.intro.go .glint { animation: glintIn .5s ease .95s forwards; }
-.intro.go .intro-mark { animation: markIn .7s cubic-bezier(.2,.8,.3,1) 1.05s forwards; }
+/* choreography — runs once .go is added. The eyelids part (scaleY), the iris
+   scales in, the slit pupil dilates then constricts (locks on), glints pop. */
+.intro.go .he-bloom    { animation: heBloom 2.7s ease-in-out .15s both; }
+.intro.go .he-eye      { animation: heOpen .7s cubic-bezier(.2,.9,.3,1) .15s forwards; }
+.intro.go .he-rim,
+.intro.go .he-rim2     { animation: heOpen .7s cubic-bezier(.2,.9,.3,1) .15s forwards; }
+.intro.go .he-iris     { animation: heIris .8s cubic-bezier(.2,.85,.3,1) .2s forwards; }
+.intro.go .he-pupil,
+.intro.go .he-pupil-rim{ animation: hePupil 1s cubic-bezier(.35,.85,.25,1) .5s forwards; }
+.intro.go .he-glint    { animation: heGlint .5s ease .9s forwards; }
+.intro.go .he-glint2   { animation: heGlint .5s ease 1s forwards; }
+.intro.go .intro-mark  { animation: markIn .7s cubic-bezier(.2,.8,.3,1) 1.05s forwards; }
 
-@keyframes irisOpen  { 0% { transform: scaleY(.04); opacity: 0; } 45% { opacity: 1; } 100% { transform: scaleY(1); opacity: 1; } }
-@keyframes pupilOpen {
-  0%   { transform: translate(-50%, -50%) scale(2.2, .04); opacity: 0; }
-  40%  { transform: translate(-50%, -50%) scale(2, 1);    opacity: 1; }   /* dilated, round */
-  100% { transform: translate(-50%, -50%) scale(1, 1);    opacity: 1; }   /* constricts to a slit */
+@keyframes heOpen  { 0% { transform: scaleY(.03); opacity: .2; } 45% { opacity: 1; } 100% { transform: scaleY(1); opacity: 1; } }
+@keyframes heIris  { 0% { transform: scale(.6); } 60% { transform: scale(1.04); } 100% { transform: scale(1); } }
+@keyframes hePupil {
+  0%   { transform: scaleX(2.6) scaleY(.4); }   /* collapsed/dilated as lids part */
+  35%  { transform: scaleX(1.7) scaleY(1);  }   /* dilated, wide — drinking in light */
+  100% { transform: scaleX(1)   scaleY(1);  }   /* constricts to a sharp slit — locks on */
 }
-@keyframes glintIn  { from { opacity: 0; transform: scale(.4); } to { opacity: .95; transform: scale(1); } }
-@keyframes markIn   { 0% { opacity: 0; transform: translate(-50%, -50%) scale(.9); } 100% { opacity: 1; transform: translate(-50%, -50%) scale(1); } }
-@keyframes eyeBloom { 0% { opacity: 0; } 30% { opacity: 1; } 70% { opacity: 1; } 100% { opacity: .85; } }
+@keyframes heGlint { from { opacity: 0; transform: scale(.4); } to { opacity: .95; transform: scale(1); } }
+@keyframes markIn  { 0% { opacity: 0; transform: translate(-50%, 4%) scale(.9); } 100% { opacity: 1; transform: translate(-50%, 4%) scale(1); } }
+@keyframes heBloom { 0% { opacity: 0; } 30% { opacity: .9; } 70% { opacity: .9; } 100% { opacity: .7; } }
 
 #app { opacity: 0; transition: opacity 1s ease; }
 #app.ready { opacity: 1; }
 @media (prefers-reduced-motion: reduce) {
-  .intro .iris, .intro .pupil, .intro .glint, .intro .intro-mark, .intro .eyewrap::before { animation: none !important; }
-  .iris { opacity: 1; transform: scaleY(1); }
-  .pupil { opacity: 1; transform: translate(-50%, -50%) scale(1, 1); }
-  .glint { opacity: .9; }
-  .intro-mark { opacity: 1; transform: translate(-50%, -50%) scale(1); }
-  .eyewrap::before { opacity: 1; }
+  .intro .he-eye, .intro .he-iris, .intro .he-pupil, .intro .he-pupil-rim,
+  .intro .he-rim, .intro .he-rim2, .intro .he-bloom,
+  .intro .he-glint, .intro .he-glint2, .intro .intro-mark { animation: none !important; }
+  /* show the fully-open, locked-on end state — no motion */
+  .he-eye, .he-rim, .he-rim2 { transform: scaleY(1); opacity: 1; }
+  .he-iris { transform: scale(1); }
+  .he-pupil, .he-pupil-rim { transform: scaleX(1) scaleY(1); }
+  .he-glint, .he-glint2 { opacity: .95; }
+  .he-bloom { opacity: .7; }
+  .intro-mark { opacity: 1; transform: translate(-50%, 4%) scale(1); }
   #app { opacity: 1; transition: none; }
 }
 
