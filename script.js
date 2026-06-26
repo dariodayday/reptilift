@@ -1,6 +1,8 @@
-// Reptilift v3.40 — earn your beast rank per exercise from your MMR.
-// v3.31 rebuilds the startup splash: two soft-glowing CSS reptile eyes in the dark,
-// then the gradient REPTILIFT wordmark (matching the home .brand) fades in, total ~2.3s.
+// Reptilift v3.41 — earn your beast rank per exercise from your MMR.
+// v3.41 rebuilds the startup splash as a cinematic one-shot drawn in code: green
+// SVG cracks crawl out of the dark, the real reptile-eye photo (intro-eye.png) opens
+// with a zoom, the neon REPTILIFT wordmark ignites, electric SVG lightning bursts,
+// then it settles and fades — one blended ~3.5s motion, all keyed off `.intro.go`.
 // v3.28 makes ACHIEVEMENTS tiered: each badge levels up through escalating thresholds
 // with fun names (e.g. lifetime volume One Ton → Rhino → … → Blue Whale → Space Shuttle).
 // reptilift_achievements stores { levels: {id: highestLevelReached}, dates: {id: date} };
@@ -3868,9 +3870,9 @@ function maybeShowOnboarding() {
 const appEl = document.getElementById("app");
 function introTimers(introEl, firstLoad) {
   introEl.offsetWidth;                                                  // force reflow so a replay restarts the CSS animations clean
-  window.setTimeout(() => introEl.classList.add("go"), 60);            // run the 7-frame storyboard sequence (CSS choreography)
-  if (firstLoad && appEl) window.setTimeout(() => appEl.classList.add("ready"), 3700);
-  window.setTimeout(() => introEl.classList.add("hide"), 3700);       // fade out after the final title frame settles (~3.5s)
+  window.setTimeout(() => introEl.classList.add("go"), 60);            // run the cinematic one-shot (cracks→eye→title→lightning→settle, all CSS)
+  if (firstLoad && appEl) window.setTimeout(() => appEl.classList.add("ready"), 3500);
+  window.setTimeout(() => introEl.classList.add("hide"), 3500);       // fade out once the title is steady & lightning has settled (~3.5s)
   window.setTimeout(() => {
     introEl.style.display = "none";
     // first load only: once the intro is out of the way, offer the onboarding wizard
@@ -3886,7 +3888,7 @@ function playIntro() {
   const old = document.getElementById("intro");
   if (!old) return;
   const fresh = old.cloneNode(true);
-  fresh.classList.remove("hide", "go", "title", "look");
+  fresh.classList.remove("hide", "go");
   fresh.style.display = "flex";
   old.replaceWith(fresh);
   introTimers(fresh, false);
