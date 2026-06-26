@@ -32,45 +32,27 @@
 }
 .intro.hide { opacity: 0; pointer-events: none; }
 
-/* eye sits ABOVE the wordmark so the fierce hunter eye stays fully visible
-   even after the big logo reveals (logo no longer covers it). */
-.splash { position: relative; display: grid; place-items: center; }
-
-/* the eye — a real reptile-eye image that emerges from the dark and slowly zooms */
-.introeye {
-  display: block; width: clamp(300px, 86vw, 500px); height: auto;
-  opacity: 0; transform: scale(1.18); transform-origin: 50% 46%;
-  filter: drop-shadow(0 0 30px rgba(120,255,60,.22));
+/* the storyboard sequence: 7 frames stacked, each fades in over the previous
+   (later frames sit on top in DOM order). cracks → eye reveals → eye opens →
+   REPTILIFT ignites → lightning → clean title. */
+.seq { position: absolute; inset: 0; }
+.seqf {
+  position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; opacity: 0;
 }
-
-/* the neon REPTILIFT wordmark, centered over the eye, ignites in like a neon sign */
-.intro-mark {
-  position: absolute; left: 50%; top: 50%; z-index: 4; pointer-events: none; white-space: nowrap;
-  font-family: "Bungee", var(--font-display); line-height: 1;
-  font-size: clamp(30px, 10.5vw, 72px); letter-spacing: 1px;
-  color: #c7ff5e;
-  text-shadow: 0 0 6px #aaff3c, 0 0 16px #7fe22a, 0 0 34px rgba(120,255,60,.7), 0 0 60px rgba(80,200,40,.5);
-  transform: translate(-50%, -50%) scale(.96); opacity: 0;
-}
-
-/* choreography — runs once .go is added: eye fades+zooms in, then the title flickers on */
-.intro.go .introeye   { animation: eyeReveal 1.5s cubic-bezier(.2,.7,.2,1) .15s forwards, eyeDrift 5s ease-out 1.6s forwards; }
-.intro.go .intro-mark { animation: markIgnite 1.5s ease 1s forwards; }
-
-@keyframes eyeReveal { 0% { opacity: 0; transform: scale(1.18); } 55% { opacity: 1; } 100% { opacity: 1; transform: scale(1); } }
-@keyframes eyeDrift  { to { transform: scale(1.06); } }   /* subtle continued zoom = life */
-@keyframes markIgnite {
-  0%  { opacity: 0;  transform: translate(-50%, -50%) scale(.96); }
-  10% { opacity: .7; } 14% { opacity: .12; } 20% { opacity: .9; } 26% { opacity: .25; } 34% { opacity: 1; }  /* neon flicker-on */
-  100%{ opacity: 1;  transform: translate(-50%, -50%) scale(1); }
-}
+.intro.go .seqf:nth-child(1) { animation: seqIn .40s ease .10s forwards; }  /* glowing cracks */
+.intro.go .seqf:nth-child(2) { animation: seqIn .40s ease .55s forwards; }  /* eye reveals */
+.intro.go .seqf:nth-child(3) { animation: seqIn .45s ease 1.00s forwards; } /* eye fully open (hold) */
+.intro.go .seqf:nth-child(4) { animation: seqIn .40s ease 1.65s forwards; } /* REPTILIFT appears over the eye */
+.intro.go .seqf:nth-child(5) { animation: seqIn .40s ease 2.05s forwards; } /* title on the scales */
+.intro.go .seqf:nth-child(6) { animation: seqIn .45s ease 2.45s forwards; } /* electric cracks spread */
+.intro.go .seqf:nth-child(7) { animation: seqIn .55s ease 2.95s forwards; } /* settles on the clean neon title */
+@keyframes seqIn { to { opacity: 1; } }
 
 #app { opacity: 0; transition: opacity 1s ease; }
 #app.ready { opacity: 1; }
 @media (prefers-reduced-motion: reduce) {
-  .intro .introeye, .intro .intro-mark { animation: none !important; }
-  .introeye { opacity: 1; transform: scale(1); }
-  .intro-mark { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  .intro .seqf { animation: none !important; }
+  .intro .seqf:nth-child(7) { opacity: 1; }    /* show only the final frame */
   #app { opacity: 1; transition: none; }
 }
 

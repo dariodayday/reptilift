@@ -1,4 +1,4 @@
-// Reptilift v3.39 — earn your beast rank per exercise from your MMR.
+// Reptilift v3.40 — earn your beast rank per exercise from your MMR.
 // v3.31 rebuilds the startup splash: two soft-glowing CSS reptile eyes in the dark,
 // then the gradient REPTILIFT wordmark (matching the home .brand) fades in, total ~2.3s.
 // v3.28 makes ACHIEVEMENTS tiered: each badge levels up through escalating thresholds
@@ -3868,15 +3868,15 @@ function maybeShowOnboarding() {
 const appEl = document.getElementById("app");
 function introTimers(introEl, firstLoad) {
   introEl.offsetWidth;                                                  // force reflow so a replay restarts the CSS animations clean
-  window.setTimeout(() => introEl.classList.add("go"), 60);            // eye fades/zooms in, then the title ignites (CSS choreography)
-  if (firstLoad && appEl) window.setTimeout(() => appEl.classList.add("ready"), 2850);
-  window.setTimeout(() => introEl.classList.add("hide"), 2850);       // fade out (title ignites ~2.5s, brief hold)
+  window.setTimeout(() => introEl.classList.add("go"), 60);            // run the 7-frame storyboard sequence (CSS choreography)
+  if (firstLoad && appEl) window.setTimeout(() => appEl.classList.add("ready"), 3700);
+  window.setTimeout(() => introEl.classList.add("hide"), 3700);       // fade out after the final title frame settles (~3.5s)
   window.setTimeout(() => {
     introEl.style.display = "none";
     // first load only: once the intro is out of the way, offer the onboarding wizard
     // to brand-new users (no-op otherwise). Guarded so it never blocks the app.
     if (firstLoad) { try { maybeShowOnboarding(); } catch (e) {} }
-  }, 3450);
+  }, 4300);
 }
 (function () {
   const intro = document.getElementById("intro");
