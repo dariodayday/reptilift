@@ -1,8 +1,8 @@
 // Reptilift service worker — cache core assets for offline use.
-const CACHE = "reptilift-v4.47";
+const CACHE = "reptilift-v4.48";
 const ASSETS = [
   "./", "index.html", "styles.css", "script.js", "supabase-config.js",
-  "logo.png", "eyes.png", "introeyes.png", "icon-192.png", "icon-512.png",
+  "logo.png", "intro-eye.png", "icon-192.png", "icon-512.png",
   "apple-touch-icon.png", "favicon.png", "manifest.json",
 ];
 

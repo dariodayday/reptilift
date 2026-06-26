@@ -19,104 +19,7 @@
   <!-- STARTUP SPLASH: a reptile eye opens in the dark, then the REPTILIFT wordmark fades in -->
   <div id="intro" class="intro">
     <div class="splash">
-      <!-- HUNTER EYE: inline SVG so playIntro()'s cloneNode keeps it; all motion is
-           class-driven (.intro.go ...) so introTimers + replay work unchanged.
-           Almond aperture (path) clips the iris; vertical slit pupil; amber→green
-           fibred iris; wet catch-lights; green-gold glow filter. -->
-      <svg class="huntereye" viewBox="0 0 220 140" role="img" aria-label="A fierce reptile eye opens in the dark" xmlns="http://www.w3.org/2000/svg">
-        <defs>
-          <!-- almond eye aperture (pointed inner/outer corners = the canthi) -->
-          <path id="he-almond" d="M6 70 C 46 22, 174 22, 214 70 C 174 118, 46 118, 6 70 Z"/>
-          <clipPath id="he-clip"><use href="#he-almond"/></clipPath>
-
-          <!-- iris colour: hot amber core bleeding into fierce green toward the rim -->
-          <radialGradient id="he-iris" cx="50%" cy="50%" r="62%">
-            <stop offset="0%"  stop-color="#fff7d6"/>
-            <stop offset="9%"  stop-color="#ffe488"/>
-            <stop offset="24%" stop-color="#f5c63a"/>
-            <stop offset="44%" stop-color="#bcd83e"/>
-            <stop offset="64%" stop-color="#5fae2c"/>
-            <stop offset="82%" stop-color="#27741c"/>
-            <stop offset="100%" stop-color="#0a2b0d"/>
-          </radialGradient>
-          <!-- dark limbal ring at the outer iris edge -->
-          <radialGradient id="he-limbal" cx="50%" cy="50%" r="50%">
-            <stop offset="0%"  stop-color="#000" stop-opacity="0"/>
-            <stop offset="78%" stop-color="#000" stop-opacity="0"/>
-            <stop offset="92%" stop-color="#031203" stop-opacity=".85"/>
-            <stop offset="100%" stop-color="#000" stop-opacity=".95"/>
-          </radialGradient>
-          <!-- domed depth shading (top-lit cornea, darker lower rim) -->
-          <radialGradient id="he-dome" cx="50%" cy="34%" r="72%">
-            <stop offset="0%"  stop-color="#fff" stop-opacity=".18"/>
-            <stop offset="42%" stop-color="#fff" stop-opacity="0"/>
-            <stop offset="100%" stop-color="#000" stop-opacity=".42"/>
-          </radialGradient>
-          <!-- vertical slit pupil fill -->
-          <radialGradient id="he-pupil" cx="50%" cy="40%" r="60%">
-            <stop offset="0%" stop-color="#0a1c0c"/>
-            <stop offset="55%" stop-color="#020402"/>
-            <stop offset="100%" stop-color="#000"/>
-          </radialGradient>
-          <!-- glassy catch-light -->
-          <radialGradient id="he-glint" cx="42%" cy="38%" r="60%">
-            <stop offset="0%" stop-color="#fff"/>
-            <stop offset="38%" stop-color="#fff" stop-opacity=".75"/>
-            <stop offset="100%" stop-color="#fff" stop-opacity="0"/>
-          </radialGradient>
-          <!-- green-gold glow around the whole eye -->
-          <filter id="he-glow" x="-40%" y="-60%" width="180%" height="220%">
-            <feGaussianBlur stdDeviation="6" result="b"/>
-            <feColorMatrix in="b" type="matrix"
-              values="0 0 0 0 .55  0 0 0 0 .95  0 0 0 0 .22  0 0 0 .9 0" result="g"/>
-            <feMerge><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
-          </filter>
-        </defs>
-
-        <!-- soft outer glow bloom (its own element so CSS can pulse it) -->
-        <use class="he-bloom" href="#he-almond" filter="url(#he-glow)"/>
-
-        <!-- everything inside the almond aperture -->
-        <g class="he-eye" clip-path="url(#he-clip)">
-          <!-- faint scaly skin / shadow at the corners -->
-          <rect x="0" y="0" width="220" height="140" fill="#0c2a10"/>
-          <ellipse class="he-iris" cx="110" cy="70" rx="58" ry="58" fill="url(#he-iris)"/>
-          <!-- radiating fibres: many thin spokes for iris texture -->
-          <g class="he-fibres" stroke-width="0.7" stroke-linecap="round">
-            <g stroke="rgba(255,250,210,.30)">
-              <path d="M110 70 L110 12"/><path d="M110 70 L138 16"/><path d="M110 70 L162 30"/>
-              <path d="M110 70 L180 50"/><path d="M110 70 L186 70"/><path d="M110 70 L180 90"/>
-              <path d="M110 70 L162 110"/><path d="M110 70 L138 124"/><path d="M110 70 L110 128"/>
-              <path d="M110 70 L82 124"/><path d="M110 70 L58 110"/><path d="M110 70 L40 90"/>
-              <path d="M110 70 L34 70"/><path d="M110 70 L40 50"/><path d="M110 70 L58 30"/><path d="M110 70 L82 16"/>
-            </g>
-            <g stroke="rgba(8,30,4,.40)">
-              <path d="M110 70 L124 13"/><path d="M110 70 L150 22"/><path d="M110 70 L172 40"/>
-              <path d="M110 70 L184 60"/><path d="M110 70 L184 80"/><path d="M110 70 L172 100"/>
-              <path d="M110 70 L150 118"/><path d="M110 70 L124 127"/>
-              <path d="M110 70 L96 127"/><path d="M110 70 L70 118"/><path d="M110 70 L48 100"/>
-              <path d="M110 70 L36 80"/><path d="M110 70 L36 60"/><path d="M110 70 L48 40"/>
-              <path d="M110 70 L70 22"/><path d="M110 70 L96 13"/>
-            </g>
-          </g>
-          <!-- limbal ring + domed depth shading over the iris -->
-          <ellipse cx="110" cy="70" rx="58" ry="58" fill="url(#he-limbal)"/>
-          <rect x="0" y="0" width="220" height="140" fill="url(#he-dome)"/>
-          <!-- vertical slit pupil (tapered top & bottom), dilates → constricts -->
-          <path class="he-pupil" d="M110 14 C 119 40, 119 100, 110 126 C 101 100, 101 40, 110 14 Z" fill="url(#he-pupil)"/>
-          <!-- inner edge of pupil catching iris light -->
-          <path class="he-pupil-rim" d="M110 14 C 119 40, 119 100, 110 126 C 101 100, 101 40, 110 14 Z"
-                fill="none" stroke="rgba(150,255,70,.35)" stroke-width="1"/>
-        </g>
-
-        <!-- almond rim line so the aperture edge reads crisply -->
-        <use class="he-rim" href="#he-almond" fill="none" stroke="rgba(6,20,6,.9)" stroke-width="3"/>
-        <use class="he-rim2" href="#he-almond" fill="none" stroke="rgba(120,210,60,.25)" stroke-width="1"/>
-
-        <!-- wet catch-lights (outside the clip so they sit on the cornea) -->
-        <ellipse class="he-glint" cx="88" cy="50" rx="13" ry="10" fill="url(#he-glint)"/>
-        <circle  class="he-glint2" cx="128" cy="86" r="4" fill="url(#he-glint)"/>
-      </svg>
+      <img class="introeye" src="intro-eye.png" alt="" />
       <h1 class="intro-mark">REPTILIFT</h1>
     </div>
   </div>
@@ -628,7 +531,7 @@
     </section>
 
     <footer class="footer">
-      Reptilift v9.46 — rough cut
+      Reptilift v9.47 — rough cut
       <button id="replayIntro" class="replay">↻ replay intro</button>
     </footer>
 

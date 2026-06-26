@@ -36,75 +36,40 @@
    even after the big logo reveals (logo no longer covers it). */
 .splash { position: relative; display: grid; place-items: center; }
 
-/* the eye — inline SVG hunter eye (almond aperture, slit pupil, fibred iris) */
-.huntereye {
-  position: relative; display: block;
-  width: clamp(190px, 60vw, 340px); height: auto;
-  overflow: visible;
-  filter: drop-shadow(0 0 22px rgba(120,230,70,.35));
+/* the eye — a real reptile-eye image that emerges from the dark and slowly zooms */
+.introeye {
+  display: block; width: clamp(300px, 86vw, 500px); height: auto;
+  opacity: 0; transform: scale(1.18); transform-origin: 50% 46%;
+  filter: drop-shadow(0 0 30px rgba(120,255,60,.22));
 }
 
-/* resting (pre-.go) state: lids shut, pupil wide, glints hidden.
-   scaleY collapses the almond vertically so the lids "part" on open.
-   transform-box:view-box keeps transform-origin in viewBox (user) coords. */
-.huntereye * { transform-box: view-box; }
-.he-eye   { transform: scaleY(.03); transform-origin: 110px 70px; opacity: .2; }
-.he-bloom { opacity: 0; transform-origin: 110px 70px; }
-.he-rim, .he-rim2 { transform: scaleY(.03); transform-origin: 110px 70px; }
-.he-pupil, .he-pupil-rim {
-  transform: scaleX(2.6) scaleY(.4); transform-origin: 110px 70px;   /* dilated, almost round */
-}
-.he-glint  { opacity: 0; transform-origin: 88px 50px; }
-.he-glint2 { opacity: 0; transform-origin: 128px 86px; }
-.he-iris { transform: scale(.6); transform-origin: 110px 70px; }
-
-/* the scaly REPTILIFT wordmark — revealed BELOW the eye (centered horizontally)
-   so the hunter eye stays in view above it. */
+/* the neon REPTILIFT wordmark, centered over the eye, ignites in like a neon sign */
 .intro-mark {
   position: absolute; left: 50%; top: 50%; z-index: 4; pointer-events: none; white-space: nowrap;
   font-family: "Bungee", var(--font-display); line-height: 1;
   font-size: clamp(30px, 10.5vw, 72px); letter-spacing: 1px;
   color: #c7ff5e;
   text-shadow: 0 0 6px #aaff3c, 0 0 16px #7fe22a, 0 0 34px rgba(120,255,60,.7), 0 0 60px rgba(80,200,40,.5);
-  transform: translate(-50%, -50%) scale(.9); opacity: 0;
+  transform: translate(-50%, -50%) scale(.96); opacity: 0;
 }
 
-/* choreography — runs once .go is added. The eyelids part (scaleY), the iris
-   scales in, the slit pupil dilates then constricts (locks on), glints pop. */
-.intro.go .he-bloom    { animation: heBloom 2.7s ease-in-out .15s both; }
-.intro.go .he-eye      { animation: heOpen .7s cubic-bezier(.2,.9,.3,1) .15s forwards; }
-.intro.go .he-rim,
-.intro.go .he-rim2     { animation: heOpen .7s cubic-bezier(.2,.9,.3,1) .15s forwards; }
-.intro.go .he-iris     { animation: heIris .8s cubic-bezier(.2,.85,.3,1) .2s forwards; }
-.intro.go .he-pupil,
-.intro.go .he-pupil-rim{ animation: hePupil 1s cubic-bezier(.35,.85,.25,1) .5s forwards; }
-.intro.go .he-glint    { animation: heGlint .5s ease .9s forwards; }
-.intro.go .he-glint2   { animation: heGlint .5s ease 1s forwards; }
-.intro.go .intro-mark  { animation: markIn .7s cubic-bezier(.2,.8,.3,1) 1.05s forwards; }
+/* choreography — runs once .go is added: eye fades+zooms in, then the title flickers on */
+.intro.go .introeye   { animation: eyeReveal 1.5s cubic-bezier(.2,.7,.2,1) .15s forwards, eyeDrift 5s ease-out 1.6s forwards; }
+.intro.go .intro-mark { animation: markIgnite 1.5s ease 1s forwards; }
 
-@keyframes heOpen  { 0% { transform: scaleY(.03); opacity: .2; } 45% { opacity: 1; } 100% { transform: scaleY(1); opacity: 1; } }
-@keyframes heIris  { 0% { transform: scale(.6); } 60% { transform: scale(1.04); } 100% { transform: scale(1); } }
-@keyframes hePupil {
-  0%   { transform: scaleX(2.6) scaleY(.4); }   /* collapsed/dilated as lids part */
-  35%  { transform: scaleX(1.7) scaleY(1);  }   /* dilated, wide — drinking in light */
-  100% { transform: scaleX(1)   scaleY(1);  }   /* constricts to a sharp slit — locks on */
+@keyframes eyeReveal { 0% { opacity: 0; transform: scale(1.18); } 55% { opacity: 1; } 100% { opacity: 1; transform: scale(1); } }
+@keyframes eyeDrift  { to { transform: scale(1.06); } }   /* subtle continued zoom = life */
+@keyframes markIgnite {
+  0%  { opacity: 0;  transform: translate(-50%, -50%) scale(.96); }
+  10% { opacity: .7; } 14% { opacity: .12; } 20% { opacity: .9; } 26% { opacity: .25; } 34% { opacity: 1; }  /* neon flicker-on */
+  100%{ opacity: 1;  transform: translate(-50%, -50%) scale(1); }
 }
-@keyframes heGlint { from { opacity: 0; transform: scale(.4); } to { opacity: .95; transform: scale(1); } }
-@keyframes markIn  { 0% { opacity: 0; transform: translate(-50%, -50%) scale(.9); } 100% { opacity: 1; transform: translate(-50%, -50%) scale(1); } }
-@keyframes heBloom { 0% { opacity: 0; } 30% { opacity: .9; } 70% { opacity: .9; } 100% { opacity: .7; } }
 
 #app { opacity: 0; transition: opacity 1s ease; }
 #app.ready { opacity: 1; }
 @media (prefers-reduced-motion: reduce) {
-  .intro .he-eye, .intro .he-iris, .intro .he-pupil, .intro .he-pupil-rim,
-  .intro .he-rim, .intro .he-rim2, .intro .he-bloom,
-  .intro .he-glint, .intro .he-glint2, .intro .intro-mark { animation: none !important; }
-  /* show the fully-open, locked-on end state — no motion */
-  .he-eye, .he-rim, .he-rim2 { transform: scaleY(1); opacity: 1; }
-  .he-iris { transform: scale(1); }
-  .he-pupil, .he-pupil-rim { transform: scaleX(1) scaleY(1); }
-  .he-glint, .he-glint2 { opacity: .95; }
-  .he-bloom { opacity: .7; }
+  .intro .introeye, .intro .intro-mark { animation: none !important; }
+  .introeye { opacity: 1; transform: scale(1); }
   .intro-mark { opacity: 1; transform: translate(-50%, -50%) scale(1); }
   #app { opacity: 1; transition: none; }
 }
