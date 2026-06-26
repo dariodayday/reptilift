@@ -61,10 +61,13 @@
 /* the scaly REPTILIFT wordmark — revealed BELOW the eye (centered horizontally)
    so the hunter eye stays in view above it. */
 .intro-mark {
-  position: absolute; left: 50%; top: 50%; z-index: 4;
-  width: clamp(320px, 90vw, 560px); height: auto; pointer-events: none;
+  position: absolute; left: 50%; top: 50%; z-index: 4; pointer-events: none; white-space: nowrap;
+  font-family: var(--font-display); font-weight: 800; line-height: 1;
+  font-size: clamp(40px, 13.5vw, 92px); letter-spacing: 3px; text-transform: uppercase;
+  background: linear-gradient(118deg, var(--gold) 0%, #ffe7a0 22%, var(--accent) 58%, #2aa564 100%);
+  -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; color: transparent;
+  filter: drop-shadow(0 2px 8px rgba(0,0,0,.6)) drop-shadow(0 0 18px rgba(47,174,107,.4));
   transform: translate(-50%, -50%) scale(.9); opacity: 0;
-  filter: drop-shadow(0 2px 8px rgba(0,0,0,.55)) drop-shadow(0 0 18px rgba(47,174,107,.45));
 }
 
 /* choreography — runs once .go is added. The eyelids part (scaleY), the iris
