@@ -1,4 +1,4 @@
-// Reptilift v3.42 — earn your beast rank per exercise from your MMR.
+// Reptilift v3.43 — earn your beast rank per exercise from your MMR.
 // v3.42 replaces the startup splash with a self-contained, code-drawn cinematic
 // (no raster assets): claw-tear gashes rake across in one swipe (flash + shake), a
 // glowing reptile eye tears open (eyelid morph + iris/pupil/spec reveal), it holds,
@@ -3915,44 +3915,102 @@ const INTRO = (function () {
   }
   function after(ms, fn) { timers.push(window.setTimeout(fn, ms)); }
 
-  // build the torn claw "slivers" — short jagged dark gashes with a green-lit edge,
-  // raking diagonally across the surface. All live in #ixTears (filter:url(#ixTear)
-  // gives them a torn edge) and are revealed at once by the rotated sweep clip.
+  // build the claw rake — ~4 parallel DIAGONAL slashes (upper-left → lower-right),
+  // each a TAPERED molten GASH (marquise/leaf polygon, pointed at both ends, widest
+  // in the middle) layered for the ripped-open-then-glowing look: dark torn edge →
+  // bright green glow fill → hot near-white core, with a few jagged crack tendrils
+  // branching off. All live in #ixTears (filter:url(#ixTear) tears the edges) and are
+  // revealed at once by the rotated sweep clip. The #ixBlur glow filter pours green
+  // light out of the cracks.
+  const SVGNS = "http://www.w3.org/2000/svg";
+  function mk(tag, attrs) {
+    const el = document.createElementNS(SVGNS, tag);
+    for (const k in attrs) el.setAttribute(k, attrs[k]);
+    return el;
+  }
+
+  // a tapered gash polygon: pointed tips at (x0,y0) & (x1,y1), bulging to half-width
+  // `w` at the middle. `wob` adds a touch of jagged asymmetry to the two long edges.
+  function gashPath(x0, y0, x1, y1, w, wob) {
+    const dx = x1 - x0, dy = y1 - y0;
+    const len = Math.hypot(dx, dy) || 1;
+    // unit normal (perpendicular to the slash direction)
+    const nx = -dy / len, ny = dx / len;
+    const segs = 16;
+    const top = [], bot = [];
+    for (let s = 0; s <= segs; s++) {
+      const t = s / segs;
+      const cx = x0 + dx * t, cy = y0 + dy * t;
+      // half-width profile: sine bulge -> pointed at both ends, fat in the middle
+      const prof = Math.sin(Math.PI * t);
+      const hw = w * (prof * prof * 0.6 + prof * 0.4);
+      const jt = (Math.sin(t * 9 + wob) * 0.9 + Math.sin(t * 23 + wob) * 0.4) * prof;
+      const jb = (Math.sin(t * 8 - wob) * 0.9 + Math.sin(t * 21 - wob) * 0.4) * prof;
+      top.push([cx + nx * (hw + jt), cy + ny * (hw + jt)]);
+      bot.push([cx - nx * (hw + jb), cy - ny * (hw + jb)]);
+    }
+    let d = `M${top[0][0].toFixed(1)} ${top[0][1].toFixed(1)}`;
+    for (let s = 1; s < top.length; s++) d += ` L${top[s][0].toFixed(1)} ${top[s][1].toFixed(1)}`;
+    for (let s = bot.length - 1; s >= 0; s--) d += ` L${bot[s][0].toFixed(1)} ${bot[s][1].toFixed(1)}`;
+    return d + " Z";
+  }
+
+  // a short forked crack tendril branching off a point along the gash
+  function tendrilPath(px, py, ang, len) {
+    const steps = 3;
+    let x = px, y = py, a = ang, d = `M${x.toFixed(1)} ${y.toFixed(1)}`;
+    for (let s = 0; s < steps; s++) {
+      a += (Math.sin(s * 2.3) ) * 0.5;        // zig-zag
+      const seg = len / steps;
+      x += Math.cos(a) * seg; y += Math.sin(a) * seg;
+      d += ` L${x.toFixed(1)} ${y.toFixed(1)}`;
+    }
+    return d;
+  }
+
   function buildTears() {
     tears.innerHTML = "";
-    const lines = [
-      [40, 150], [110, 120], [180, 95], [250, 80],   // [x-offset along rake, base length]
+    // 4 parallel diagonal slashes raking UL→LR across the central area, varied in
+    // length/offset so it reads as a claw rake (not a grid). [x0,y0,x1,y1,halfWidth]
+    const slashes = [
+      [78, 92, 300, 250, 11],
+      [110, 70, 322, 232, 14],
+      [142, 96, 330, 270, 12],
+      [176, 120, 318, 300, 9],
     ];
-    // 4 parallel claw streaks, each a thin tapering gash
-    const streaks = [70, 130, 190, 250];
-    streaks.forEach((y, i) => {
-      const x0 = 20 + i * 6, x1 = 380 - i * 4;
-      const wob = (t) => Math.sin(t * 7 + i) * 6;
-      let d = `M${x0} ${y + wob(0)}`;
-      const segs = 10;
-      for (let s = 1; s <= segs; s++) {
-        const t = s / segs;
-        const x = x0 + (x1 - x0) * t;
-        d += ` L${x.toFixed(1)} ${(y + wob(t)).toFixed(1)}`;
-      }
-      const w = 9 - i * 0.8;
-      const p = document.createElementNS("http://www.w3.org/2000/svg", "path");
-      p.setAttribute("d", d);
-      p.setAttribute("fill", "none");
-      p.setAttribute("stroke", "#070b04");
-      p.setAttribute("stroke-width", String(w));
-      p.setAttribute("stroke-linecap", "round");
-      tears.appendChild(p);
-      // green-lit torn edge riding just above each gash
-      const glow = document.createElementNS("http://www.w3.org/2000/svg", "path");
-      glow.setAttribute("d", d);
-      glow.setAttribute("fill", "none");
-      glow.setAttribute("stroke", "#a3e635");
-      glow.setAttribute("stroke-width", "1.6");
-      glow.setAttribute("stroke-linecap", "round");
-      glow.setAttribute("opacity", "0.85");
-      glow.setAttribute("transform", "translate(0 -3)");
-      tears.appendChild(glow);
+    slashes.forEach((s, i) => {
+      const [x0, y0, x1, y1, w] = s;
+      const wob = i * 1.7 + 0.6;
+      const dxn = (x1 - x0), dyn = (y1 - y0);
+      const len = Math.hypot(dxn, dyn) || 1;
+      const ux = dxn / len, uy = dyn / len;     // along-slash unit
+      const nx = -uy, ny = ux;                  // normal unit
+
+      // crack tendrils first (sit beneath the gash), branching from a few points
+      const tg = mk("g", {});
+      const branchAt = [0.32, 0.6, 0.78];
+      branchAt.forEach((t, k) => {
+        const bx = x0 + dxn * t, by = y0 + dyn * t;
+        const side = (k % 2 === 0) ? 1 : -1;
+        const baseAng = Math.atan2(ny * side, nx * side);
+        const tl = 14 + ((i + k) % 3) * 5;
+        const td = tendrilPath(bx + nx * side * (w * 0.5), by + ny * side * (w * 0.5),
+                               baseAng + (k - 1) * 0.35, tl);
+        // dark crack channel
+        tg.appendChild(mk("path", { d: td, fill: "none", stroke: "#04070a", "stroke-width": "3", "stroke-linecap": "round" }));
+        // green-lit crack
+        tg.appendChild(mk("path", { d: td, fill: "none", stroke: "#7bd11a", "stroke-width": "1.2", "stroke-linecap": "round", opacity: "0.8", filter: "url(#ixBlur)" }));
+      });
+      tears.appendChild(tg);
+
+      // 1) dark torn outline — the ripped scaly edge (slightly larger)
+      tears.appendChild(mk("path", { d: gashPath(x0, y0, x1, y1, w + 2.5, wob), fill: "#04070a" }));
+      // 2) bright green glowing fill — green light pours out of the crack
+      tears.appendChild(mk("path", { d: gashPath(x0, y0, x1, y1, w, wob), fill: "#7bd11a", filter: "url(#ixBlur)", opacity: "0.95" }));
+      // 2b) a crisper inner green (no blur) so the gash edge stays defined
+      tears.appendChild(mk("path", { d: gashPath(x0, y0, x1, y1, w - 2.5, wob + 0.4), fill: "#a3e635" }));
+      // 3) hot near-white core down the center, thin
+      tears.appendChild(mk("path", { d: gashPath(x0 + ux * 6, y0 + uy * 6, x1 - ux * 6, y1 - uy * 6, w * 0.34, wob + 1.1), fill: "#eaffbf" }));
     });
   }
 
