@@ -67,7 +67,6 @@
         <button class="menu-btn premium" id="goPremiumBtn" data-go="premium-page"><span>⭐</span> <span id="goPremiumLbl">Go Apex</span></button>
         <button class="menu-btn" data-go="shop"><span>🛒</span> Shop</button>
         <button class="menu-btn" data-go="friends-page"><span>👥</span> Friends &amp; Leaderboard</button>
-        <button class="menu-btn" data-go="progress"><span>📈</span> Progress</button>
         <button class="menu-btn" data-go="plates-page"><span>🏋️</span> Plate Calculator</button>
         <button class="menu-btn gold" id="flexBtn"><span>💪</span> Flex Card</button>
         <button class="menu-btn" data-go="contact-page"><span>✉️</span> Contact</button>
@@ -246,6 +245,47 @@
 
       <!-- achievements preview: count + a few badges; taps through to the full grid -->
       <div class="profileach" id="profileAch"></div>
+
+      <!-- PROGRESS CHARTS (Apex-gated) — rendered into here by renderProfile() via
+           renderProgress(). Free users see the lock CTA instead (handled in JS). -->
+      <div class="profileprogress" id="profileProgress">
+        <h2 class="section-title acct-pagetitle prog-section-title">Progress</h2>
+
+        <div class="prog-block">
+          <h3 class="prog-title">Training Calendar</h3>
+          <p class="prog-sub">Every day you trained, colored by how many sets you logged.</p>
+          <div id="progHeatmap" class="prog-heatmap"></div>
+        </div>
+
+        <div class="prog-block">
+          <h3 class="prog-title">Overall MMR</h3>
+          <p class="prog-sub">Your average rank across all logged lifts, over time.</p>
+          <div id="progOverall" class="prog-chart"></div>
+        </div>
+
+        <div class="prog-block">
+          <div class="prog-head">
+            <h3 class="prog-title">Per-lift MMR</h3>
+            <select id="progLiftSelect" class="prog-select" aria-label="Choose a lift"></select>
+          </div>
+          <p class="prog-sub">Estimated strength for one exercise, set by set.</p>
+          <div id="progLift" class="prog-chart"></div>
+        </div>
+
+        <div class="prog-block">
+          <h3 class="prog-title">Bodyweight</h3>
+          <p class="prog-sub">Logged whenever you update your bodyweight up top in Log.</p>
+          <div id="progBw" class="prog-chart"></div>
+        </div>
+
+        <div class="prog-block">
+          <h3 class="prog-title">Workout volume</h3>
+          <p class="prog-sub">Total weight moved per session (sets × reps × load).</p>
+          <div id="progVolume" class="prog-chart"></div>
+        </div>
+
+        <button class="btn" id="progShareBtn">📸 Share my rank card</button>
+      </div>
 
       <!-- editable fields -->
       <div class="profileedit">
@@ -437,52 +477,11 @@
       </div>
     </div>
 
-    <!-- PROGRESS (charts) — dedicated screen, reached from Menu / Ranks (not a tab) -->
-    <section id="progress" class="panel">
-      <button class="backlink" data-go="home" type="button">← Menu</button>
-      <h2 class="section-title acct-pagetitle">Progress</h2>
-
-      <div class="prog-block">
-        <h3 class="prog-title">Training Calendar</h3>
-        <p class="prog-sub">Every day you trained, colored by how many sets you logged.</p>
-        <div id="progHeatmap" class="prog-heatmap"></div>
-      </div>
-
-      <div class="prog-block">
-        <h3 class="prog-title">Overall MMR</h3>
-        <p class="prog-sub">Your average rank across all logged lifts, over time.</p>
-        <div id="progOverall" class="prog-chart"></div>
-      </div>
-
-      <div class="prog-block">
-        <div class="prog-head">
-          <h3 class="prog-title">Per-lift MMR</h3>
-          <select id="progLiftSelect" class="prog-select" aria-label="Choose a lift"></select>
-        </div>
-        <p class="prog-sub">Estimated strength for one exercise, set by set.</p>
-        <div id="progLift" class="prog-chart"></div>
-      </div>
-
-      <div class="prog-block">
-        <h3 class="prog-title">Bodyweight</h3>
-        <p class="prog-sub">Logged whenever you update your bodyweight up top in Log.</p>
-        <div id="progBw" class="prog-chart"></div>
-      </div>
-
-      <div class="prog-block">
-        <h3 class="prog-title">Workout volume</h3>
-        <p class="prog-sub">Total weight moved per session (sets × reps × load).</p>
-        <div id="progVolume" class="prog-chart"></div>
-      </div>
-
-      <button class="btn" id="progShareBtn">📸 Share my rank card</button>
-    </section>
-
     <!-- RANKS -->
     <section id="ranks" class="panel">
       <h2 class="section-title">Your Ranks</h2>
       <div class="ranks-actions">
-        <button class="btn ghost" data-go="progress">📈 Progress charts</button>
+        <button class="btn ghost" data-go="profile-page">📈 Progress charts</button>
         <button class="btn ghost" id="ranksShareBtn">📸 Share my rank</button>
       </div>
       <div id="yourRanks" class="yourranks"></div>
@@ -585,7 +584,7 @@
     </section>
 
     <footer class="footer">
-      Reptilift v9.60 — rough cut
+      Reptilift v9.61 — rough cut
       <button id="replayIntro" class="replay">↻ replay intro</button>
     </footer>
 

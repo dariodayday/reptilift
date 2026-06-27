@@ -1,4 +1,7 @@
-// Reptilift v3.51 — earn your beast rank per exercise from your MMR.
+// Reptilift v3.52 — earn your beast rank per exercise from your MMR.
+// v3.52 moves the Progress charts + training heatmap onto the Profile page
+// (#profileProgress, rendered from renderProfile via renderProgress, same builders,
+// same Apex gate); the standalone #progress page + its Menu button are removed.
 // v3.47 adds to the premium calorie tracker: a FOOD_DB search (built-in ~150 foods +
 // OpenFoodFacts online lookup, debounced + graceful-degrade offline) with a quantity
 // multiplier, and PHOTO logging (downscaled JPEG data URL on the optional entry.photo,
@@ -715,7 +718,6 @@ function switchTab(name) {
   if (name === "history") renderHistory();
   if (name === "shop") renderShop();
   if (name === "quests") renderQuests();
-  if (name === "progress") renderProgress();
   if (name === "profile-page") renderProfile();
   if (name === "achievements-page") renderAchievements();
   if (name === "friends-page") { try { if (typeof renderFriendsPage === "function") renderFriendsPage(); } catch (e) {} }
@@ -819,7 +821,6 @@ function premiumChanged() {
   const id = active ? active.id : "";
   try {
     if (id === "profile-page") renderProfile();
-    else if (id === "progress") renderProgress();
     else if (id === "calories-page") renderCalories();
     else if (id === "ranks") renderYourRanks();
   } catch (e) {}
@@ -3265,6 +3266,10 @@ function renderProfile() {
 
   renderProfileAchievements();
 
+  // progress charts + training heatmap (Apex-gated, rendered into #profileProgress).
+  // Guarded so a chart hiccup never breaks the rest of the profile.
+  try { renderProgress(); } catch (e) {}
+
   // populate the edit fields from the stored profile
   const nameI = document.getElementById("peName");
   const bioI = document.getElementById("peBio");
@@ -4024,14 +4029,17 @@ function renderProgress() {
   // PREMIUM GATE: the charts + heatmap are premium-only. Non-premium sees a lock
   // state instead. The blocks are hidden (not removed) so going premium repaints
   // them on the next render. A reusable #progLock node holds the lock CTA.
-  const panel = document.getElementById("progress");
-  const blocks = panel ? panel.querySelectorAll(".prog-block") : [];
+  // The Progress charts now live INSIDE the Profile page (#profileProgress); this
+  // is called from renderProfile() (load-order safe — never at top level).
+  const panel = document.getElementById("profileProgress");
+  if (!panel) return;                         // guard: nothing to render into
+  const blocks = panel.querySelectorAll(".prog-block");
   const shareBtn = document.getElementById("progShareBtn");
   let lock = document.getElementById("progLock");
   if (!isPremium()) {
     blocks.forEach((b) => b.classList.add("hidden"));
     if (shareBtn) shareBtn.classList.add("hidden");
-    if (!lock && panel) {
+    if (!lock) {
       lock = document.createElement("div");
       lock.id = "progLock";
       lock.className = "lockstate";

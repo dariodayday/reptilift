@@ -1002,6 +1002,10 @@ body {
 .profileach .pa-badge.earned { background: color-mix(in srgb, var(--gold) 16%, transparent); border-color: color-mix(in srgb, var(--gold) 45%, transparent); }
 .profileach .pa-badge.locked { filter: grayscale(1); opacity: .35; }
 
+/* progress charts embedded on the profile page (#profileProgress) */
+.profileprogress { margin-bottom: 18px; }
+.profileprogress .prog-section-title { margin-top: 8px; padding-top: 18px; border-top: 1px solid var(--line); }
+
 /* achievements — dedicated page grid */
 .ach-headrow { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
 .ach-headrow .section-title { margin-bottom: 0; }
