@@ -1,4 +1,8 @@
-// Reptilift v3.46 — earn your beast rank per exercise from your MMR.
+// Reptilift v3.47 — earn your beast rank per exercise from your MMR.
+// v3.47 adds to the premium calorie tracker: a FOOD_DB search (built-in ~150 foods +
+// OpenFoodFacts online lookup, debounced + graceful-degrade offline) with a quantity
+// multiplier, and PHOTO logging (downscaled JPEG data URL on the optional entry.photo,
+// backward-compatible with old {name,kcal} entries; stored in the synced calories blob).
 // v3.46 adds PREMIUM. profile.premium (synced in reptilift_profile) gates the app:
 // FREE users cap at the 🐊 Atrophy Alligator rank — display-layer only (shownMMR/
 // shownBeast clamp every place a beast/MMR is shown: home hero, Your Ranks, profile,
@@ -817,26 +821,187 @@ function premiumChanged() {
 }
 
 // ===== CALORIE TRACKER (premium-only) =====
-// reptilift_calories: { goal, days: { "YYYY-MM-DD": [{ name, kcal }] } } (in SYNC_KEYS).
-// Non-premium sees a lock state with a Go Premium CTA. Premium gets a simple daily
-// tracker: set a goal, quick-add common items, add a custom entry, see today's total
-// vs goal with a progress bar, delete entries, and a small recent-days strip. All
-// render + wiring lives here; everything guarded; load-order safe.
+// reptilift_calories: { goal, days: { "YYYY-MM-DD": [{ name, kcal, photo? }] } } (in
+// SYNC_KEYS). `photo` is an OPTIONAL small downscaled JPEG data URL — old {name,kcal}
+// entries stay valid. Non-premium sees a lock state with a Go Premium CTA. Premium gets:
+// set a goal, quick-add, a FOOD_DB search (built-in + OpenFoodFacts online when on),
+// quantity multiplier, photo capture, manual entry, today's total vs goal with a
+// progress bar, delete, and a recent-days strip. All render + wiring lives here;
+// everything guarded; load-order safe (FOOD_DB is a plain const, no top-level calls).
 const CAL_QUICK = [
   { name: "Chicken breast", kcal: 165 }, { name: "Protein shake", kcal: 150 },
   { name: "Eggs (2)", kcal: 140 }, { name: "Rice (cup)", kcal: 200 },
   { name: "Banana", kcal: 105 }, { name: "Snack", kcal: 250 },
+];
+// FOOD_DB: ~150 common foods. kcal is per the listed `serving`. Plain const array
+// (load-order safe — only read inside renderCalories handlers). Values are
+// reasonable rounded approximations, not lab-precise.
+const FOOD_DB = [
+  // --- Proteins ---
+  { name: "Chicken breast", serving: "100g", kcal: 165 },
+  { name: "Chicken thigh", serving: "100g", kcal: 209 },
+  { name: "Turkey breast", serving: "100g", kcal: 135 },
+  { name: "Ground beef (80/20)", serving: "100g", kcal: 254 },
+  { name: "Lean steak", serving: "100g", kcal: 217 },
+  { name: "Pork chop", serving: "100g", kcal: 231 },
+  { name: "Bacon", serving: "1 slice", kcal: 43 },
+  { name: "Salmon", serving: "100g", kcal: 208 },
+  { name: "Tuna (canned in water)", serving: "100g", kcal: 116 },
+  { name: "Cod", serving: "100g", kcal: 82 },
+  { name: "Shrimp", serving: "100g", kcal: 99 },
+  { name: "Egg", serving: "1 egg", kcal: 72 },
+  { name: "Egg white", serving: "1 white", kcal: 17 },
+  { name: "Greek yogurt (plain)", serving: "100g", kcal: 59 },
+  { name: "Cottage cheese", serving: "100g", kcal: 98 },
+  { name: "Whey protein", serving: "1 scoop", kcal: 120 },
+  { name: "Casein protein", serving: "1 scoop", kcal: 120 },
+  { name: "Tofu", serving: "100g", kcal: 76 },
+  { name: "Tempeh", serving: "100g", kcal: 192 },
+  { name: "Edamame", serving: "1 cup", kcal: 188 },
+  { name: "Lentils (cooked)", serving: "1 cup", kcal: 230 },
+  { name: "Black beans (cooked)", serving: "1 cup", kcal: 227 },
+  { name: "Chickpeas (cooked)", serving: "1 cup", kcal: 269 },
+  { name: "Ham (deli)", serving: "1 slice", kcal: 30 },
+  { name: "Beef jerky", serving: "1 oz", kcal: 116 },
+  { name: "Protein bar", serving: "1 bar", kcal: 210 },
+  // --- Carbs / grains ---
+  { name: "White rice (cooked)", serving: "1 cup", kcal: 205 },
+  { name: "Brown rice (cooked)", serving: "1 cup", kcal: 216 },
+  { name: "Oats (dry)", serving: "1/2 cup", kcal: 150 },
+  { name: "Quinoa (cooked)", serving: "1 cup", kcal: 222 },
+  { name: "Pasta (cooked)", serving: "1 cup", kcal: 221 },
+  { name: "White bread", serving: "1 slice", kcal: 79 },
+  { name: "Whole wheat bread", serving: "1 slice", kcal: 81 },
+  { name: "Bagel", serving: "1 bagel", kcal: 245 },
+  { name: "Tortilla (flour)", serving: "1 tortilla", kcal: 140 },
+  { name: "Pita bread", serving: "1 pita", kcal: 165 },
+  { name: "Potato (baked)", serving: "1 medium", kcal: 161 },
+  { name: "Sweet potato", serving: "1 medium", kcal: 112 },
+  { name: "French fries", serving: "medium", kcal: 365 },
+  { name: "Cereal (corn flakes)", serving: "1 cup", kcal: 100 },
+  { name: "Granola", serving: "1/2 cup", kcal: 230 },
+  { name: "Pancake", serving: "1 pancake", kcal: 90 },
+  { name: "Waffle", serving: "1 waffle", kcal: 100 },
+  { name: "Couscous (cooked)", serving: "1 cup", kcal: 176 },
+  { name: "Corn", serving: "1 cup", kcal: 132 },
+  { name: "Crackers", serving: "5 crackers", kcal: 80 },
+  // --- Fruits ---
+  { name: "Banana", serving: "1 medium", kcal: 105 },
+  { name: "Apple", serving: "1 medium", kcal: 95 },
+  { name: "Orange", serving: "1 medium", kcal: 62 },
+  { name: "Strawberries", serving: "1 cup", kcal: 49 },
+  { name: "Blueberries", serving: "1 cup", kcal: 84 },
+  { name: "Grapes", serving: "1 cup", kcal: 104 },
+  { name: "Watermelon", serving: "1 cup", kcal: 46 },
+  { name: "Pineapple", serving: "1 cup", kcal: 82 },
+  { name: "Mango", serving: "1 cup", kcal: 99 },
+  { name: "Pear", serving: "1 medium", kcal: 101 },
+  { name: "Peach", serving: "1 medium", kcal: 59 },
+  { name: "Avocado", serving: "1 medium", kcal: 240 },
+  { name: "Raspberries", serving: "1 cup", kcal: 64 },
+  // --- Vegetables ---
+  { name: "Broccoli", serving: "1 cup", kcal: 31 },
+  { name: "Spinach (raw)", serving: "1 cup", kcal: 7 },
+  { name: "Carrot", serving: "1 medium", kcal: 25 },
+  { name: "Bell pepper", serving: "1 medium", kcal: 31 },
+  { name: "Cucumber", serving: "1 cup", kcal: 16 },
+  { name: "Tomato", serving: "1 medium", kcal: 22 },
+  { name: "Green beans", serving: "1 cup", kcal: 31 },
+  { name: "Asparagus", serving: "1 cup", kcal: 27 },
+  { name: "Mushrooms", serving: "1 cup", kcal: 15 },
+  { name: "Cauliflower", serving: "1 cup", kcal: 27 },
+  { name: "Onion", serving: "1 medium", kcal: 44 },
+  { name: "Kale", serving: "1 cup", kcal: 33 },
+  { name: "Salad (mixed greens)", serving: "2 cups", kcal: 15 },
+  // --- Fats / nuts / oils ---
+  { name: "Almonds", serving: "1 oz", kcal: 164 },
+  { name: "Walnuts", serving: "1 oz", kcal: 185 },
+  { name: "Cashews", serving: "1 oz", kcal: 157 },
+  { name: "Peanuts", serving: "1 oz", kcal: 161 },
+  { name: "Peanut butter", serving: "1 tbsp", kcal: 94 },
+  { name: "Almond butter", serving: "1 tbsp", kcal: 98 },
+  { name: "Olive oil", serving: "1 tbsp", kcal: 119 },
+  { name: "Butter", serving: "1 tbsp", kcal: 102 },
+  { name: "Coconut oil", serving: "1 tbsp", kcal: 117 },
+  { name: "Chia seeds", serving: "1 tbsp", kcal: 58 },
+  { name: "Flax seeds", serving: "1 tbsp", kcal: 55 },
+  { name: "Sunflower seeds", serving: "1 oz", kcal: 165 },
+  { name: "Pistachios", serving: "1 oz", kcal: 159 },
+  // --- Dairy / drinks ---
+  { name: "Whole milk", serving: "1 cup", kcal: 149 },
+  { name: "Skim milk", serving: "1 cup", kcal: 83 },
+  { name: "Almond milk (unsw.)", serving: "1 cup", kcal: 30 },
+  { name: "Oat milk", serving: "1 cup", kcal: 120 },
+  { name: "Cheddar cheese", serving: "1 oz", kcal: 113 },
+  { name: "Mozzarella", serving: "1 oz", kcal: 85 },
+  { name: "Parmesan", serving: "1 tbsp", kcal: 22 },
+  { name: "Cream cheese", serving: "1 tbsp", kcal: 51 },
+  { name: "Orange juice", serving: "1 cup", kcal: 112 },
+  { name: "Apple juice", serving: "1 cup", kcal: 114 },
+  { name: "Cola", serving: "12 oz can", kcal: 140 },
+  { name: "Diet cola", serving: "12 oz can", kcal: 0 },
+  { name: "Beer", serving: "12 oz", kcal: 153 },
+  { name: "Wine (red)", serving: "5 oz", kcal: 125 },
+  { name: "Coffee (black)", serving: "1 cup", kcal: 2 },
+  { name: "Latte", serving: "12 oz", kcal: 190 },
+  { name: "Energy drink", serving: "1 can", kcal: 110 },
+  { name: "Sports drink", serving: "20 oz", kcal: 130 },
+  { name: "Coconut water", serving: "1 cup", kcal: 46 },
+  { name: "Smoothie", serving: "16 oz", kcal: 250 },
+  // --- Snacks / sweets ---
+  { name: "Potato chips", serving: "1 oz", kcal: 152 },
+  { name: "Tortilla chips", serving: "1 oz", kcal: 138 },
+  { name: "Popcorn (air-popped)", serving: "1 cup", kcal: 31 },
+  { name: "Pretzels", serving: "1 oz", kcal: 108 },
+  { name: "Dark chocolate", serving: "1 oz", kcal: 155 },
+  { name: "Milk chocolate", serving: "1 oz", kcal: 152 },
+  { name: "Cookie", serving: "1 cookie", kcal: 78 },
+  { name: "Brownie", serving: "1 piece", kcal: 132 },
+  { name: "Ice cream", serving: "1/2 cup", kcal: 137 },
+  { name: "Donut", serving: "1 donut", kcal: 253 },
+  { name: "Muffin", serving: "1 muffin", kcal: 265 },
+  { name: "Granola bar", serving: "1 bar", kcal: 120 },
+  { name: "Rice cake", serving: "1 cake", kcal: 35 },
+  { name: "Hummus", serving: "2 tbsp", kcal: 70 },
+  { name: "Trail mix", serving: "1/4 cup", kcal: 175 },
+  // --- Fast food / restaurant ---
+  { name: "Cheeseburger", serving: "1 burger", kcal: 300 },
+  { name: "Big burger (1/4 lb)", serving: "1 burger", kcal: 540 },
+  { name: "Chicken nuggets", serving: "6 pieces", kcal: 270 },
+  { name: "Pizza slice (cheese)", serving: "1 slice", kcal: 285 },
+  { name: "Pizza slice (pepperoni)", serving: "1 slice", kcal: 313 },
+  { name: "Hot dog", serving: "1 hot dog", kcal: 290 },
+  { name: "Burrito", serving: "1 burrito", kcal: 580 },
+  { name: "Taco", serving: "1 taco", kcal: 170 },
+  { name: "Sushi roll", serving: "6 pieces", kcal: 255 },
+  { name: "Chicken sandwich", serving: "1 sandwich", kcal: 440 },
+  { name: "Caesar salad", serving: "1 bowl", kcal: 360 },
+  { name: "Fried chicken", serving: "1 piece", kcal: 320 },
+  { name: "Ramen (instant)", serving: "1 pack", kcal: 380 },
+  { name: "Mac & cheese", serving: "1 cup", kcal: 310 },
+  // --- Condiments / extras ---
+  { name: "Ketchup", serving: "1 tbsp", kcal: 17 },
+  { name: "Mayonnaise", serving: "1 tbsp", kcal: 94 },
+  { name: "Mustard", serving: "1 tbsp", kcal: 9 },
+  { name: "Ranch dressing", serving: "2 tbsp", kcal: 129 },
+  { name: "Soy sauce", serving: "1 tbsp", kcal: 8 },
+  { name: "Honey", serving: "1 tbsp", kcal: 64 },
+  { name: "Maple syrup", serving: "1 tbsp", kcal: 52 },
+  { name: "Sugar", serving: "1 tsp", kcal: 16 },
+  { name: "Jam", serving: "1 tbsp", kcal: 56 },
 ];
 function calToday() {
   const d = todayStr();
   if (!Array.isArray(calories.days[d])) calories.days[d] = [];
   return calories.days[d];
 }
-function calAdd(name, kcal) {
+function calAdd(name, kcal, photo) {
   name = String(name || "").trim().slice(0, 40) || "Entry";
   kcal = Math.max(0, Math.round(Number(kcal) || 0));
-  if (!kcal) return;
-  calToday().push({ name, kcal });
+  if (!kcal && !photo) return;
+  const entry = { name, kcal };
+  if (photo) entry.photo = photo;          // optional data URL; old {name,kcal} stays valid
+  calToday().push(entry);
   saveCalories(); renderCalories();
 }
 function calDelete(i) {
@@ -874,6 +1039,7 @@ function renderCalories() {
   const listHtml = entries.length
     ? entries.map((e, i) => `
         <div class="cal-entry">
+          ${e.photo ? `<img class="cal-e-thumb" data-photo="${i}" src="${e.photo}" alt="meal" />` : ""}
           <span class="cal-e-name">${escapeHtml(e.name)}</span>
           <span class="cal-e-kcal">${(e.kcal || 0).toLocaleString()}</span>
           <button class="cal-e-del" data-del="${i}" type="button" aria-label="Delete">✕</button>
@@ -903,9 +1069,19 @@ function renderCalories() {
     <h3 class="sub">Quick add</h3>
     <div class="cal-quickrow">${quickHtml}</div>
     <h3 class="sub">Add entry</h3>
+    <div class="cal-search">
+      <input type="text" id="calSearch" placeholder="🔎 Search foods (e.g. chicken, rice)…" autocomplete="off" />
+      <div class="cal-results" id="calResults"></div>
+    </div>
     <div class="cal-addrow">
       <input type="text" id="calName" placeholder="Food / meal" autocomplete="off" maxlength="40" />
       <input type="number" id="calKcal" placeholder="kcal" min="0" inputmode="numeric" />
+      <label class="cal-qty">×<input type="number" id="calQty" value="1" min="0.25" step="0.25" inputmode="decimal" /></label>
+    </div>
+    <div class="cal-addrow2">
+      <button class="cal-photo-btn" id="calPhotoBtn" type="button">📷 Photo</button>
+      <input type="file" id="calPhotoInput" accept="image/*" capture="environment" hidden />
+      <span class="cal-photo-status" id="calPhotoStatus"></span>
       <button class="btn" id="calAddBtn" type="button">Add</button>
     </div>
     <h3 class="sub">Today</h3>
@@ -918,15 +1094,123 @@ function renderCalories() {
     b.addEventListener("click", () => calAdd(b.dataset.q, b.dataset.k)));
   const nameI = document.getElementById("calName");
   const kcalI = document.getElementById("calKcal");
+  const qtyI = document.getElementById("calQty");
   const addBtn = document.getElementById("calAddBtn");
+  // pendingPhoto holds the downscaled data URL for the next Add (cleared after).
+  let pendingPhoto = null;
+  const photoBtn = document.getElementById("calPhotoBtn");
+  const photoInput = document.getElementById("calPhotoInput");
+  const photoStatus = document.getElementById("calPhotoStatus");
+  if (photoBtn && photoInput) {
+    photoBtn.addEventListener("click", () => photoInput.click());
+    photoInput.addEventListener("change", () => {
+      const f = photoInput.files && photoInput.files[0];
+      if (!f) return;
+      if (photoStatus) photoStatus.textContent = "…";
+      // reuse the avatar downscaler: small square JPEG keeps the synced blob tiny.
+      downscaleImage(f, 200, 0.6).then((url) => {
+        pendingPhoto = url;
+        if (photoStatus) photoStatus.innerHTML = `<img class="cal-photo-prev" src="${url}" alt="" /> attached`;
+      }).catch(() => {
+        pendingPhoto = null;
+        if (photoStatus) photoStatus.textContent = "photo failed";
+      });
+    });
+  }
+  const qty = () => { const n = Number(qtyI && qtyI.value); return n > 0 ? n : 1; };
   const doAdd = () => {
-    if (!kcalI || !kcalI.value) return;
-    calAdd(nameI ? nameI.value : "Entry", kcalI.value);
+    const baseK = kcalI && kcalI.value ? Number(kcalI.value) : 0;
+    const k = Math.round(baseK * qty());
+    if (!k && !pendingPhoto) return;
+    calAdd(nameI ? nameI.value : "Entry", k, pendingPhoto);
+    pendingPhoto = null;   // renderCalories re-runs and resets the field anyway
   };
   if (addBtn) addBtn.addEventListener("click", doAdd);
   if (kcalI) kcalI.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); doAdd(); } });
   box.querySelectorAll(".cal-e-del").forEach((b) =>
     b.addEventListener("click", () => calDelete(+b.dataset.del)));
+  box.querySelectorAll(".cal-e-thumb").forEach((img) =>
+    img.addEventListener("click", () => calPhotoView(img.getAttribute("src"))));
+  // ---- food search (built-in FOOD_DB instant + OpenFoodFacts online, debounced) ----
+  const searchI = document.getElementById("calSearch");
+  const resultsBox = document.getElementById("calResults");
+  if (searchI && resultsBox) {
+    let offTimer = null, offToken = 0;
+    const pick = (name, kcal) => {
+      if (nameI) nameI.value = name;
+      if (kcalI) kcalI.value = Math.round(kcal);
+      if (qtyI) qtyI.value = "1";
+      resultsBox.innerHTML = "";
+      searchI.value = "";
+      if (kcalI) kcalI.focus();
+    };
+    const rowHtml = (name, kcal, tag) =>
+      `<button class="cal-res" type="button" data-n="${escapeHtml(name)}" data-k="${Math.round(kcal)}">` +
+      `<span class="cal-res-name">${escapeHtml(name)}</span>` +
+      `<span class="cal-res-meta">${Math.round(kcal)} kcal${tag ? ` <em class="cal-res-tag">${tag}</em>` : ""}</span></button>`;
+    const bindRows = () => resultsBox.querySelectorAll(".cal-res").forEach((b) =>
+      b.addEventListener("click", () => pick(b.dataset.n, +b.dataset.k)));
+    const renderLocal = (q) => {
+      const matches = FOOD_DB
+        .filter((f) => f.name.toLowerCase().indexOf(q) >= 0)
+        .slice(0, 8)
+        .map((f) => rowHtml(`${f.name} (${f.serving})`, f.kcal, ""));
+      resultsBox.innerHTML = matches.length ? matches.join("") : `<div class="cal-res-empty">No built-in match — type kcal manually below.</div>`;
+      bindRows();
+    };
+    const queryOnline = (q, token) => {
+      try {
+        if (!navigator.onLine) return;
+        const ctrl = new AbortController();
+        const to = setTimeout(() => { try { ctrl.abort(); } catch (e) {} }, 5000);
+        const url = "https://world.openfoodfacts.org/cgi/search.pl?search_terms=" +
+          encodeURIComponent(q) + "&search_simple=1&action=process&json=1&page_size=8&fields=product_name,nutriments";
+        fetch(url, { signal: ctrl.signal }).then((r) => r.ok ? r.json() : null).then((data) => {
+          clearTimeout(to);
+          if (!data || token !== offToken) return;     // stale/aborted — ignore
+          const prods = Array.isArray(data.products) ? data.products : [];
+          const rows = [];
+          prods.forEach((p) => {
+            const nm = (p.product_name || "").trim();
+            const k = p.nutriments && Number(p.nutriments["energy-kcal_100g"]);
+            if (nm && k > 0 && rows.length < 8) rows.push(rowHtml(`${nm} (100g)`, k, "online"));
+          });
+          if (rows.length) {
+            resultsBox.insertAdjacentHTML("beforeend", `<div class="cal-res-sep">Online results</div>` + rows.join(""));
+            bindRows();
+          }
+        }).catch(() => { clearTimeout(to); });   // offline/failed → keep built-in only
+      } catch (e) { /* never throw */ }
+    };
+    searchI.addEventListener("input", () => {
+      const q = searchI.value.trim().toLowerCase();
+      if (offTimer) clearTimeout(offTimer);
+      if (q.length < 2) { resultsBox.innerHTML = ""; return; }
+      renderLocal(q);
+      const token = ++offToken;
+      offTimer = setTimeout(() => queryOnline(q, token), 400);   // debounce online
+    });
+  }
+}
+// Simple full-size photo viewer for a logged meal (tap thumbnail). Built lazily,
+// guarded, never throws; backdrop or ✕ closes it.
+function calPhotoView(src) {
+  if (!src) return;
+  try {
+    let m = document.getElementById("calPhotoModal");
+    if (!m) {
+      m = document.createElement("div");
+      m.id = "calPhotoModal";
+      m.className = "cal-photo-modal";
+      m.innerHTML = `<div class="cal-photo-modal-inner"><img alt="meal" /><button class="cal-photo-close" type="button" aria-label="Close">✕</button></div>`;
+      document.body.appendChild(m);
+      const close = () => m.classList.remove("open");
+      m.addEventListener("click", (e) => { if (e.target === m || e.target.classList.contains("cal-photo-close")) close(); });
+    }
+    const img = m.querySelector("img");
+    if (img) img.src = src;
+    m.classList.add("open");
+  } catch (e) { /* never throw */ }
 }
 
 // ===== plate calculator =====
