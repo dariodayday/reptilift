@@ -64,6 +64,8 @@
       </div>
 
       <nav class="menu">
+        <button class="menu-btn premium" id="goPremiumBtn" data-go="premium-page"><span>⭐</span> <span id="goPremiumLbl">Go Premium</span></button>
+        <button class="menu-btn" data-go="calories-page"><span>🍗</span> Calories</button>
         <button class="menu-btn" data-go="friends-page"><span>👥</span> Friends &amp; Leaderboard</button>
         <button class="menu-btn" data-go="progress"><span>📈</span> Progress</button>
         <button class="menu-btn" data-go="plates-page"><span>🏋️</span> Plate Calculator</button>
@@ -181,6 +183,51 @@
 
         <div class="pl-result" id="plResult"></div>
       </div>
+    </section>
+
+    <!-- GO PREMIUM (dedicated page) — reached from the Menu "⭐ Go Premium" button and
+         from every lock CTA. Payment is NOT wired yet: a placeholder Subscribe button
+         + a code-unlock (BEASTMODE) flip profile.premium. renderPremium() fills the
+         dynamic bits (active state / restore) — load-order safe. -->
+    <section id="premium-page" class="panel">
+      <button class="backlink" data-go="home" type="button">← Menu</button>
+      <h2 class="section-title acct-pagetitle">👑 Reptilift Premium</h2>
+      <p class="hint">Free lifters cap at the 🐊 Atrophy Alligator. Premium unlocks the full food chain and the pro tools.</p>
+
+      <div class="premium-card">
+        <div class="prem-perks">
+          <div class="prem-perk"><span>🦅🐺🦍🐘🦏🐙</span><div><b>Unlock every rank</b><span>Climb past Alligator all the way to the Optimal Octopus.</span></div></div>
+          <div class="prem-perk"><span>🍗</span><div><b>Calorie tracker</b><span>Set a daily goal and log your intake on-brand.</span></div></div>
+          <div class="prem-perk"><span>📈</span><div><b>Progress charts</b><span>MMR, per-lift, bodyweight, volume &amp; the training heatmap.</span></div></div>
+        </div>
+
+        <!-- shown when NOT premium -->
+        <div id="premLocked">
+          <button class="btn big premium-sub" id="premSubBtn" type="button" disabled>Subscribe — coming soon</button>
+          <p class="prem-soon">Card payments arrive soon. For now, unlock with a code.</p>
+          <div class="prem-code">
+            <input id="premCodeInput" type="text" placeholder="Have a code?" autocomplete="off" autocapitalize="characters" spellcheck="false" />
+            <button class="btn" id="premCodeBtn" type="button">Unlock</button>
+          </div>
+          <div class="prem-codemsg" id="premCodeMsg"></div>
+        </div>
+
+        <!-- shown when premium is active -->
+        <div id="premActive" class="hidden">
+          <div class="prem-activebanner">✓ Premium active <span>👑</span></div>
+          <p class="prem-soon">All ranks, the calorie tracker and progress charts are unlocked. Thanks for feeding the beast.</p>
+          <button class="btn ghost" id="premManageBtn" type="button">Turn off premium (testing)</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- CALORIES (dedicated page) — PREMIUM-only daily calorie tracker. Non-premium
+         shows a lock state. Data lives in reptilift_calories (in SYNC_KEYS). All
+         render + wiring in renderCalories() / the wiring IIFE — load-order safe. -->
+    <section id="calories-page" class="panel">
+      <button class="backlink" data-go="home" type="button">← Menu</button>
+      <h2 class="section-title acct-pagetitle">🍗 Calorie Tracker</h2>
+      <div id="calBody"></div>
     </section>
 
     <!-- PROFILE (dedicated page) — reached from the avatar chip + the Menu button -->
@@ -533,7 +580,7 @@
     </section>
 
     <footer class="footer">
-      Reptilift v9.53 — rough cut
+      Reptilift v9.54 — rough cut
       <button id="replayIntro" class="replay">↻ replay intro</button>
     </footer>
 

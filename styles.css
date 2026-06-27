@@ -1605,3 +1605,104 @@ button.fr-card:active { background: var(--card2); }
 }
 .un-err { color: #e0563b; font-size: 13px; min-height: 18px; margin-bottom: 8px; }
 .un-card .btn { margin-bottom: 8px; }
+
+/* ===== PREMIUM (gating, Go Premium page, lock states, badges) ===== */
+/* Menu "Go Premium" button — gold-accented; flips to a crown when active. */
+.menu-btn.premium { border-left-color: var(--gold); background: linear-gradient(90deg, color-mix(in srgb, var(--gold) 14%, var(--card)), var(--card)); }
+.menu-btn.premium.owned { border-left-color: var(--gold); background: linear-gradient(90deg, color-mix(in srgb, var(--gold) 22%, var(--card)), var(--card)); }
+
+/* small PREMIUM badge (profile header) */
+.premium-badge {
+  display: inline-block; vertical-align: middle; margin-left: 6px;
+  font-family: var(--font-display); font-size: 11px; font-weight: 800; letter-spacing: .8px;
+  color: #2a1c00; background: linear-gradient(90deg, var(--gold), #ffd970);
+  padding: 3px 8px; border-radius: var(--r-pill);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--gold) 55%, transparent);
+}
+
+/* locked beast cards in the food-chain gallery */
+.card.card-locked { opacity: .72; cursor: pointer; }
+.card.card-locked .emoji { filter: grayscale(.35); }
+.card-lock { position: absolute; top: 6px; right: 8px; font-size: 15px; filter: none; }
+.card { position: relative; }
+
+/* "to next rank" / rankpanel Go-Premium CTA */
+.rankrow-next.rankrow-locked { color: var(--gold); font-weight: 700; }
+
+/* reusable lock state (calories + progress) */
+.lockstate {
+  text-align: center; background: var(--card); border: 1px solid var(--line);
+  border-radius: var(--r-card); padding: 30px 20px; margin: 16px 0;
+}
+.lockstate .lock-emoji { font-size: 44px; margin-bottom: 10px; }
+.lockstate .lock-title { font-family: var(--font-display); font-weight: 800; font-size: 18px; margin-bottom: 6px; }
+.lockstate .lock-sub { color: var(--muted); font-size: 14px; margin-bottom: 16px; }
+.btn.premium-sub { background: linear-gradient(90deg, var(--gold), #ffd970); color: #2a1c00; font-weight: 800; }
+.btn.premium-sub:disabled { opacity: .65; cursor: default; }
+
+/* Go Premium page */
+.premium-card { background: var(--card); border: 1px solid var(--line); border-radius: var(--r-card); padding: 18px; }
+.prem-perks { display: flex; flex-direction: column; gap: 14px; margin-bottom: 18px; }
+.prem-perk { display: flex; gap: 12px; align-items: flex-start; }
+.prem-perk > span { font-size: 24px; line-height: 1.1; flex: none; }
+.prem-perk div { display: flex; flex-direction: column; }
+.prem-perk b { font-family: var(--font-display); font-size: 15px; }
+.prem-perk div span { color: var(--muted); font-size: 13px; }
+.premium-sub.big { width: 100%; }
+.prem-soon { color: var(--muted); font-size: 13px; text-align: center; margin: 10px 0; }
+.prem-code { display: flex; gap: 8px; margin-top: 6px; }
+.prem-code input {
+  flex: 1; background: var(--bg); border: 1px solid var(--line); border-radius: var(--r-input);
+  color: var(--text); font-family: inherit; font-size: 16px; padding: 12px; outline: none;
+  text-transform: uppercase;
+}
+.prem-code input:focus { border-color: var(--gold); }
+.prem-codemsg { min-height: 20px; font-size: 13px; text-align: center; margin-top: 8px; }
+.prem-codemsg.ok { color: var(--accent); font-weight: 700; }
+.prem-codemsg.err { color: #e0563b; }
+.prem-activebanner {
+  font-family: var(--font-display); font-weight: 800; font-size: 18px; text-align: center;
+  color: var(--gold); padding: 12px; border: 1px solid color-mix(in srgb, var(--gold) 45%, transparent);
+  border-radius: var(--r-chip); background: color-mix(in srgb, var(--gold) 10%, transparent); margin-bottom: 4px;
+}
+
+/* ===== CALORIE TRACKER ===== */
+.cal-goalrow { margin-bottom: 14px; }
+.cal-summary {
+  background: var(--card); border: 1px solid var(--line); border-radius: var(--r-card);
+  padding: 16px; margin-bottom: 6px;
+}
+.cal-total { display: flex; align-items: baseline; gap: 8px; margin-bottom: 10px; }
+.cal-total b { font-family: var(--font-display); font-size: 30px; font-weight: 800; color: var(--c, var(--accent)); font-variant-numeric: tabular-nums; }
+.cal-total span { color: var(--muted); font-size: 13px; }
+.cal-summary .progress { height: 10px; }
+.cal-summary .progress i { background: var(--c, var(--accent)); }
+.cal-remain { margin-top: 8px; font-size: 13px; color: var(--muted); font-weight: 600; }
+.cal-quickrow { display: flex; flex-wrap: wrap; gap: 8px; }
+.cal-quick {
+  background: var(--card); border: 1px solid var(--line); border-radius: var(--r-pill);
+  color: var(--text); font-family: inherit; font-size: 13px; font-weight: 600; padding: 8px 12px; cursor: pointer;
+}
+.cal-quick small { color: var(--muted); margin-left: 4px; }
+.cal-quick:active { transform: scale(.97); }
+.cal-addrow { display: flex; gap: 8px; }
+.cal-addrow input {
+  background: var(--bg); border: 1px solid var(--line); border-radius: var(--r-input);
+  color: var(--text); font-family: inherit; font-size: 16px; padding: 12px; outline: none;
+}
+.cal-addrow #calName { flex: 1; }
+.cal-addrow #calKcal { width: 90px; }
+.cal-addrow input:focus { border-color: var(--gold); }
+.cal-list { display: flex; flex-direction: column; gap: 8px; }
+.cal-entry {
+  display: flex; align-items: center; gap: 10px; background: var(--card);
+  border: 1px solid var(--line); border-radius: var(--r-chip); padding: 11px 12px;
+}
+.cal-e-name { flex: 1; font-size: 14px; }
+.cal-e-kcal { font-weight: 800; font-variant-numeric: tabular-nums; color: var(--gold); }
+.cal-e-del { background: none; border: none; color: var(--muted); font-size: 15px; cursor: pointer; padding: 2px 4px; }
+.cal-e-del:hover { color: #e0563b; }
+.cal-recent { display: flex; gap: 8px; flex-wrap: wrap; }
+.cal-day { background: var(--card); border: 1px solid var(--line); border-radius: var(--r-chip); padding: 10px 14px; text-align: center; }
+.cal-day b { display: block; font-family: var(--font-display); font-weight: 800; font-variant-numeric: tabular-nums; }
+.cal-day span { font-size: 11px; color: var(--muted); }

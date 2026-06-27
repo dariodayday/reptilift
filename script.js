@@ -1,4 +1,15 @@
-// Reptilift v3.45 — earn your beast rank per exercise from your MMR.
+// Reptilift v3.46 — earn your beast rank per exercise from your MMR.
+// v3.46 adds PREMIUM. profile.premium (synced in reptilift_profile) gates the app:
+// FREE users cap at the 🐊 Atrophy Alligator rank — display-layer only (shownMMR/
+// shownBeast clamp every place a beast/MMR is shown: home hero, Your Ranks, profile,
+// flex/rank cards, history, the active-session rankpanel, finish celebrations + recap,
+// and the published leaderboard row). Stored MMR/bests are NEVER altered, so going
+// premium instantly reveals the user's true rank. PREMIUM unlocks: the full food
+// chain, a calorie tracker (#calories-page, new key reptilift_calories in SYNC_KEYS:
+// { goal, days:{ "YYYY-MM-DD":[{name,kcal}] } }), and the Progress charts (gated).
+// Unlock is via code BEASTMODE on the #premium-page (Stripe later); a testing toggle
+// turns it back off. The beast gallery shows all 8 ranks but flags premium-only ones
+// with 🔒. All gates are guarded + load-order safe (helpers only called from fns/init).
 // v3.44 rebuilds the startup splash as a simple, robust, image-driven sequence: the
 // glowing claw-slash photo (intro-claws.png) flares in with an impact flash, crossfades
 // into the reptile-eye photo (intro-eye.png) which zooms/focuses, then the neon
@@ -91,9 +102,9 @@
 // Non-reptilift writes (incl. Supabase's own session keys) pass straight through.
 const SYNC_KEYS = [
   "reptilift_achievements", "reptilift_active", "reptilift_bests", "reptilift_bwlog",
-  "reptilift_customex", "reptilift_inventory", "reptilift_lastsets", "reptilift_profile",
-  "reptilift_quests", "reptilift_routines", "reptilift_sets", "reptilift_sound",
-  "reptilift_streak", "reptilift_wallet", "reptilift_workouts",
+  "reptilift_calories", "reptilift_customex", "reptilift_inventory", "reptilift_lastsets",
+  "reptilift_profile", "reptilift_quests", "reptilift_routines", "reptilift_sets",
+  "reptilift_sound", "reptilift_streak", "reptilift_wallet", "reptilift_workouts",
 ];
 let cloudUser = null;        // set to the Supabase user once logged in
 let cloudSuppress = false;   // true while applyCloud() is writing keys (don't echo back)
@@ -138,6 +149,38 @@ const classify = (mmr) => {
 // display label for a beast's MMR band, e.g. "0–50" or "751–800" (top shown closed).
 const beastRange = (b) =>
   b.mmrMax === Infinity ? `${b.mmrMin}–${MMR_MAX}` : `${b.mmrMin}–${b.mmrMax - 1}`;
+
+// ===== PREMIUM gating (display layer only — never touches stored MMR/bests) =====
+// Free users are capped at the Atrophy Alligator rank (tier 2). The user's REAL MMR
+// keeps computing/saving exactly as before; we only CLAMP what's shown so going
+// premium instantly reveals their true rank from already-stored data.
+//   ALLIGATOR_TIER  = 2 (Atrophy Alligator's position in BEASTS)
+//   ALLIGATOR_MAX   = the top of the Alligator band (125) — the highest MMR a free
+//                     user may see. (mmrMax is exclusive at 126, so 125 is the ceiling.)
+// PREMIUM_CODE unlocks premium manually until real Stripe payment is wired.
+const PREMIUM_CODE = "BEASTMODE";
+const ALLIGATOR_TIER = 2;
+const ALLIGATOR_MAX = byId("atrophy") ? byId("atrophy").mmrMax - 1 : 125;   // 125
+// is the current account premium? Reads the synced profile flag. Guarded so a
+// missing/odd profile never throws (load-order safe — only called from functions).
+function isPremium() { return !!(typeof profile === "object" && profile && profile.premium); }
+// display-capped MMR: premium shows the real value; free users never see past 125.
+function shownMMR(mmr) {
+  if (mmr == null) return mmr;
+  return isPremium() ? mmr : Math.min(mmr, ALLIGATOR_MAX);
+}
+// display-capped beast: premium shows the real beast; free users at a tier above
+// Alligator are shown as Alligator. null/undefined passes through unchanged.
+function shownBeast(beast) {
+  if (!beast) return beast;
+  if (isPremium()) return beast;
+  return tierOf(beast.id) > ALLIGATOR_TIER ? byId("atrophy") : beast;
+}
+// is a free user sitting AT or ABOVE the Alligator ceiling for a given real MMR?
+// (used to swap "to next rank" text for a Go-Premium CTA below the cap.)
+function cappedAtAlligator(realMmr) {
+  return !isPremium() && realMmr != null && realMmr >= ALLIGATOR_MAX;
+}
 
 // ===== MMR strength standards (0–800) =====
 // The MMR bands top out at these fixed values; an exercise's anchor oneRM curve
@@ -304,6 +347,10 @@ if (typeof profile.username !== "string") profile.username = "";   // public @ha
 // cloud save (logging in on a new device that has onboarded=true won't re-show the
 // wizard). Plain-guard only here (load-order safe; the check runs from init below).
 if (typeof profile.onboarded !== "boolean") profile.onboarded = false;
+// PREMIUM flag — lives INSIDE the synced profile (reptilift_profile, in SYNC_KEYS) so
+// premium status follows the user across devices. Default false. Plain guard only
+// here (load-order safe; isPremium()/the gates are called from functions/handlers).
+if (typeof profile.premium !== "boolean") profile.premium = false;
 // last-used barbell weight for the Plate Calculator (lbs). Lives inside the synced
 // profile so it follows the user across devices. Allowed bars: 45/35/15/0; anything
 // else falls back to 45 (Olympic). Plain guard only here — load-order safe.
@@ -413,6 +460,15 @@ if (achievements.earned && typeof achievements.earned === "object") {
   delete achievements.earned;   // fully migrated; drop the legacy map
 }
 function saveAchievements() { localStorage.setItem("reptilift_achievements", JSON.stringify(achievements)); }
+
+// ===== calorie tracker state (PREMIUM feature) =====
+// reptilift_calories: { goal: Number, days: { "YYYY-MM-DD": [{ name, kcal }] } }.
+// In SYNC_KEYS so it travels with the cloud save. Normalized with PLAIN guards only
+// here (load-order safe — todayStr()/render run later from functions/init).
+let calories = safeParse("reptilift_calories", { goal: 2000, days: {} });
+if (typeof calories.goal !== "number" || calories.goal < 0) calories.goal = 2000;
+if (!calories.days || typeof calories.days !== "object") calories.days = {};
+function saveCalories() { localStorage.setItem("reptilift_calories", JSON.stringify(calories)); }
 
 function saveEconomy() {
   localStorage.setItem("reptilift_wallet", JSON.stringify(wallet));
@@ -654,6 +710,8 @@ function switchTab(name) {
   if (name === "friends-page") { try { if (typeof renderFriendsPage === "function") renderFriendsPage(); } catch (e) {} }
   if (name === "contact-page") { try { renderContact(); } catch (e) {} }
   if (name === "plates-page") { try { renderPlates(); } catch (e) {} }
+  if (name === "premium-page") { try { renderPremium(); } catch (e) {} }
+  if (name === "calories-page") { try { renderCalories(); } catch (e) {} }
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
@@ -689,6 +747,186 @@ function renderContact() {
     try { window.location.href = href; } catch (e2) {}
   });
   contactWired = true;
+}
+
+// ===== GO PREMIUM page =====
+// Payment is NOT wired yet. The page shows the perks, a placeholder Subscribe button,
+// and a code-unlock (PREMIUM_CODE) that flips profile.premium=true (synced inside
+// reptilift_profile). A "turn off" toggle is included for testing. renderPremium()
+// only swaps locked/active states; wiring is bound ONCE (guarded). Load-order safe —
+// only called from switchTab / handlers.
+let premiumWired = false;
+function renderPremium() {
+  const locked = document.getElementById("premLocked");
+  const active = document.getElementById("premActive");
+  const prem = isPremium();
+  if (locked) locked.classList.toggle("hidden", prem);
+  if (active) active.classList.toggle("hidden", !prem);
+  const msg = document.getElementById("premCodeMsg");
+  if (msg && !prem) msg.textContent = "";
+  // keep the Menu button label in sync (Go Premium → 👑 Premium when active).
+  const goLbl = document.getElementById("goPremiumLbl");
+  if (goLbl) goLbl.textContent = prem ? "Premium" : "Go Premium";
+  const goBtn = document.getElementById("goPremiumBtn");
+  if (goBtn) goBtn.classList.toggle("owned", prem);
+  if (premiumWired) return;
+  premiumWired = true;
+  const input = document.getElementById("premCodeInput");
+  const codeBtn = document.getElementById("premCodeBtn");
+  const tryCode = () => {
+    const val = (input && input.value ? input.value : "").trim();
+    if (!val) return;
+    if (val.toLowerCase() === PREMIUM_CODE.toLowerCase()) {
+      profile.premium = true;
+      try { save(); } catch (e) {}
+      if (input) input.value = "";
+      if (msg) { msg.className = "prem-codemsg ok"; msg.textContent = "Premium unlocked 🐙"; }
+      try { if (soundOn) blip(); } catch (e) {}
+      // re-render everywhere the gate matters so true ranks/charts/tracker appear now.
+      premiumChanged();
+      renderPremium();
+    } else {
+      if (msg) { msg.className = "prem-codemsg err"; msg.textContent = "That code didn't work. Try again."; }
+    }
+  };
+  if (codeBtn) codeBtn.addEventListener("click", tryCode);
+  if (input) input.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); tryCode(); } });
+  const manage = document.getElementById("premManageBtn");
+  if (manage) manage.addEventListener("click", () => {
+    if (!confirm("Turn premium OFF? (testing only — your ranks/charts/calories cap again.)")) return;
+    profile.premium = false;
+    try { save(); } catch (e) {}
+    premiumChanged();
+    renderPremium();
+  });
+}
+// Premium status flipped — repaint every gated/capped surface so the change is
+// instant. Fully guarded so a missing render fn never throws.
+function premiumChanged() {
+  [renderChart, renderHome, renderYourRanks].forEach((fn) => { try { if (typeof fn === "function") fn(); } catch (e) {} });
+  const active = document.querySelector(".panel.active");
+  const id = active ? active.id : "";
+  try {
+    if (id === "profile-page") renderProfile();
+    else if (id === "progress") renderProgress();
+    else if (id === "calories-page") renderCalories();
+    else if (id === "ranks") renderYourRanks();
+  } catch (e) {}
+  // re-publish my (now un/capped) leaderboard row.
+  try { if (typeof publishPublicProfile === "function") publishPublicProfile(); } catch (e) {}
+}
+
+// ===== CALORIE TRACKER (premium-only) =====
+// reptilift_calories: { goal, days: { "YYYY-MM-DD": [{ name, kcal }] } } (in SYNC_KEYS).
+// Non-premium sees a lock state with a Go Premium CTA. Premium gets a simple daily
+// tracker: set a goal, quick-add common items, add a custom entry, see today's total
+// vs goal with a progress bar, delete entries, and a small recent-days strip. All
+// render + wiring lives here; everything guarded; load-order safe.
+const CAL_QUICK = [
+  { name: "Chicken breast", kcal: 165 }, { name: "Protein shake", kcal: 150 },
+  { name: "Eggs (2)", kcal: 140 }, { name: "Rice (cup)", kcal: 200 },
+  { name: "Banana", kcal: 105 }, { name: "Snack", kcal: 250 },
+];
+function calToday() {
+  const d = todayStr();
+  if (!Array.isArray(calories.days[d])) calories.days[d] = [];
+  return calories.days[d];
+}
+function calAdd(name, kcal) {
+  name = String(name || "").trim().slice(0, 40) || "Entry";
+  kcal = Math.max(0, Math.round(Number(kcal) || 0));
+  if (!kcal) return;
+  calToday().push({ name, kcal });
+  saveCalories(); renderCalories();
+}
+function calDelete(i) {
+  const t = calToday();
+  if (i >= 0 && i < t.length) { t.splice(i, 1); saveCalories(); renderCalories(); }
+}
+function calSetGoal(v) {
+  const n = Math.max(0, Math.round(Number(v) || 0));
+  calories.goal = n; saveCalories(); renderCalories();
+}
+function renderCalories() {
+  const box = document.getElementById("calBody");
+  if (!box) return;
+  // PREMIUM GATE: non-premium sees a lock state + Go Premium CTA.
+  if (!isPremium()) {
+    box.innerHTML = `
+      <div class="lockstate">
+        <div class="lock-emoji">🔒</div>
+        <div class="lock-title">Calorie tracking is a Premium feature</div>
+        <p class="lock-sub">Set a daily goal and log your intake on-brand. Unlock it with Premium.</p>
+        <button class="btn premium-sub" data-gopremium type="button">👑 Go Premium</button>
+      </div>`;
+    wireGoPremium(box);
+    return;
+  }
+  const entries = calToday();
+  const total = entries.reduce((s, e) => s + (e.kcal || 0), 0);
+  const goal = calories.goal || 0;
+  const pct = goal > 0 ? Math.min(100, Math.round((total / goal) * 100)) : 0;
+  const over = goal > 0 && total > goal;
+  const remaining = goal - total;
+  const quickHtml = CAL_QUICK.map((q) =>
+    `<button class="cal-quick" data-q="${escapeHtml(q.name)}" data-k="${q.kcal}" type="button">${escapeHtml(q.name)} <small>${q.kcal}</small></button>`
+  ).join("");
+  const listHtml = entries.length
+    ? entries.map((e, i) => `
+        <div class="cal-entry">
+          <span class="cal-e-name">${escapeHtml(e.name)}</span>
+          <span class="cal-e-kcal">${(e.kcal || 0).toLocaleString()}</span>
+          <button class="cal-e-del" data-del="${i}" type="button" aria-label="Delete">✕</button>
+        </div>`).join("")
+    : `<p class="empty">Nothing logged today. Add a meal to feed the beast. 🦎</p>`;
+  // recent days strip (last few days, excluding today, that have entries)
+  const recentDays = Object.keys(calories.days)
+    .filter((d) => d !== todayStr() && Array.isArray(calories.days[d]) && calories.days[d].length)
+    .sort().reverse().slice(0, 5);
+  const recentHtml = recentDays.length
+    ? `<h3 class="sub">Recent days</h3><div class="cal-recent">` + recentDays.map((d) => {
+        const tot = calories.days[d].reduce((s, e) => s + (e.kcal || 0), 0);
+        return `<div class="cal-day"><b>${tot.toLocaleString()}</b><span>${prettyDate(d)}</span></div>`;
+      }).join("") + `</div>`
+    : "";
+  box.innerHTML = `
+    <div class="cal-goalrow">
+      <label class="pe-label">Daily goal (kcal)
+        <input type="number" id="calGoal" min="0" inputmode="numeric" value="${goal || ""}" placeholder="2000" />
+      </label>
+    </div>
+    <div class="cal-summary" style="--c:${over ? "#e0563b" : "#46b07a"}">
+      <div class="cal-total"><b>${total.toLocaleString()}</b><span>of ${goal ? goal.toLocaleString() : "—"} kcal today</span></div>
+      <div class="progress"><i style="width:${pct}%"></i></div>
+      <div class="cal-remain">${goal ? (over ? `${Math.abs(remaining).toLocaleString()} over goal` : `${remaining.toLocaleString()} left`) : "Set a goal above"}</div>
+    </div>
+    <h3 class="sub">Quick add</h3>
+    <div class="cal-quickrow">${quickHtml}</div>
+    <h3 class="sub">Add entry</h3>
+    <div class="cal-addrow">
+      <input type="text" id="calName" placeholder="Food / meal" autocomplete="off" maxlength="40" />
+      <input type="number" id="calKcal" placeholder="kcal" min="0" inputmode="numeric" />
+      <button class="btn" id="calAddBtn" type="button">Add</button>
+    </div>
+    <h3 class="sub">Today</h3>
+    <div class="cal-list">${listHtml}</div>
+    ${recentHtml}`;
+  // wiring (rebuilt each render — bind directly)
+  const goalI = document.getElementById("calGoal");
+  if (goalI) goalI.addEventListener("change", () => calSetGoal(goalI.value));
+  box.querySelectorAll(".cal-quick").forEach((b) =>
+    b.addEventListener("click", () => calAdd(b.dataset.q, b.dataset.k)));
+  const nameI = document.getElementById("calName");
+  const kcalI = document.getElementById("calKcal");
+  const addBtn = document.getElementById("calAddBtn");
+  const doAdd = () => {
+    if (!kcalI || !kcalI.value) return;
+    calAdd(nameI ? nameI.value : "Entry", kcalI.value);
+  };
+  if (addBtn) addBtn.addEventListener("click", doAdd);
+  if (kcalI) kcalI.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); doAdd(); } });
+  box.querySelectorAll(".cal-e-del").forEach((b) =>
+    b.addEventListener("click", () => calDelete(+b.dataset.del)));
 }
 
 // ===== plate calculator =====
@@ -1133,11 +1371,15 @@ function buildCelebrationQueue(w) {
     if (!exo.sets.some((s) => s.done)) return;
     const ex = exById(exo.exId); if (!ex) return;
     const rec = bests[exo.exId];
-    const finalBeast = rec ? classify(rec.mmr) : null;
+    // CAP for free users: the celebrated beast clamps at Alligator, and a start rank
+    // already at/above the cap means there's nothing new to celebrate. So a free user
+    // can still celebrate *reaching* Alligator, but never crossing higher bands.
+    const finalBeast = shownBeast(rec ? classify(rec.mmr) : null);
     if (!finalBeast) return;
-    const startTier = exo.startBeast ? tierOf(exo.startBeast) : 0;
-    if (tierOf(finalBeast.id) <= startTier) return;   // no net rank-up this session
-    const old = exo.startBeast ? byId(exo.startBeast) : null;   // null => egg hatch
+    const startTier = exo.startBeast ? tierOf((shownBeast(byId(exo.startBeast)) || {}).id) : 0;
+    if (tierOf(finalBeast.id) <= startTier) return;   // no net (shown) rank-up this session
+    const oldReal = exo.startBeast ? byId(exo.startBeast) : null;
+    const old = oldReal ? shownBeast(oldReal) : null;   // null => egg hatch
     out.push({ ex, beast: finalBeast, old });
   });
   return out.sort((a, b) => tierOf(a.beast.id) - tierOf(b.beast.id));
@@ -1194,19 +1436,32 @@ function summarizeWorkout(w) {
       rankup: rankupByEx[exo.exId] || null,
     });
   });
-  // overall rank change
-  const ob = overallBeast(), obId = ob ? ob.id : null;
+  // overall rank change — CAP for free users so a non-premium lifter never gets an
+  // overall rank-up banner for crossing a beast above Alligator. Compare the SHOWN
+  // (capped) tiers; stored MMR/bests are untouched.
+  const ob = shownBeast(overallBeast()), obId = ob ? ob.id : null;
   const before = w.overallBefore || { mmr: null, beast: null };
-  const overallChanged = !!obId && (before.beast == null || tierOf(obId) > tierOf(before.beast));
+  const beforeShown = before.beast ? shownBeast(byId(before.beast)) : null;
+  const beforeTier = beforeShown ? tierOf(beforeShown.id) : 0;
+  const overallChanged = !!obId && tierOf(obId) > beforeTier;
+  // cap the per-lift rank-up rows shown in the recap, and drop any whose capped
+  // jump nets nothing (e.g. a free user crossing Rhino→Octopus still shows Alligator).
+  const cappedRankups = Object.values(rankupByEx).map((e) => {
+    const to = shownBeast(byId(e.to));
+    const from = e.from ? shownBeast(byId(e.from)) : null;
+    if (!to) return null;
+    if (from && tierOf(to.id) <= tierOf(from.id)) return null;
+    return { ...e, to: to.id, from: from ? from.id : null };
+  }).filter(Boolean).sort((a, b) => tierOf(b.to) - tierOf(a.to));
   return {
     empty: setCount === 0,
     routineName: w.routineName || null,
     dur: Math.round((Date.now() - w.start) / 1000),
     setCount, exCount: exDone.length, volume: Math.round(volume),
     exercises: exDone,
-    rankups: Object.values(rankupByEx).sort((a, b) => tierOf(b.to) - tierOf(a.to)),
-    topBeast: topBeast ? topBeast.id : null,
-    overallChanged, overallBeast: obId, overallMmr: overallMMR(),
+    rankups: cappedRankups,
+    topBeast: topBeast ? shownBeast(topBeast).id : null,
+    overallChanged, overallBeast: obId, overallMmr: shownMMR(overallMMR()),
   };
 }
 
@@ -1259,9 +1514,10 @@ function showReview(r, silent) {
       const bs = e.bestSet;
       // bs.lbs / bs.added are canonical LB — show them in the current display unit.
       const bw = parseInt(bs && (bs.lbs != null ? bs.lbs : bs.added), 10) || 0;
-      const detail = bs ? (bs.beast ? `${byId(bs.beast).emoji} ` : "") +
+      const bsBeast = bs && bs.beast ? shownBeast(byId(bs.beast)) : null;   // capped for free users
+      const detail = bs ? (bsBeast ? `${bsBeast.emoji} ` : "") +
         (parseInt(bs.lbs, 10) || parseInt(bs.added, 10) ? `${toDisplayWeight(bw)} × ${bs.reps}` : `× ${bs.reps}`) : "—";
-      const pr = e.newMmr != null ? `<span class="rv-pr">PR · MMR ${e.newMmr.toLocaleString()}</span>` : "";
+      const pr = e.newMmr != null ? `<span class="rv-pr">PR · MMR ${shownMMR(e.newMmr).toLocaleString()}</span>` : "";
       return `<div class="rv-exrow">
         <span class="rv-ex-name">${e.name}</span>
         <span class="rv-ex-meta">${detail} ${pr}</span>
@@ -1408,22 +1664,28 @@ function renderWorkout() {
   list.innerHTML = "";
   workout.exercises.forEach((exo, i) => {
     const ex = exById(exo.exId);
-    const rec = bests[exo.exId]; const rb = rec ? classify(rec.mmr) : null;
+    const rec = bests[exo.exId];
+    // CAP for free users (display only): beast clamps at Alligator, MMR at 125.
+    const rb = rec ? shownBeast(classify(rec.mmr)) : null;
     const prev = lastSets[exo.exId] || [];
 
     // rank progress panel — progress is toward the next MMR band.
     let rankHtml;
     if (rb) {
+      const recShown = rec ? shownMMR(rec.mmr) : null;
       const ti = tierOf(rb.id); let pct = 100, nextTxt = "🐙 Apex beast — maxed out", label = "Next rank";
-      if (ti < BEASTS.length) {
+      if (rec && cappedAtAlligator(rec.mmr)) {
+        // free user at the Alligator ceiling → Go Premium nudge instead of a target.
+        pct = 100; label = "Rank capped"; nextTxt = "🔒 Go Premium to rank past Alligator";
+      } else if (ti < BEASTS.length) {
         const nb = BEASTS[ti]; const span = nb.mmrMin - rb.mmrMin;
-        pct = Math.max(5, Math.min(100, Math.round(((rec.mmr - rb.mmrMin) / span) * 100)));
+        pct = Math.max(5, Math.min(100, Math.round(((recShown - rb.mmrMin) / span) * 100)));
         // concrete how-to: the weight/reps needed on THIS lift to cross into nb.
         const tgt = nextRankTarget(ex, nb.mmrMin, profile.bodyweight);
         if (tgt && tgt.kind === "weight") nextTxt = `Hit ~${toDisplayWeight(tgt.weight)} ${unitLabel()} → ${nb.emoji} ${nb.name}`;
         else if (tgt && tgt.kind === "reps") nextTxt = `Do ~${tgt.reps} reps → ${nb.emoji} ${nb.name}`;
-        else nextTxt = `+${nb.mmrMin - rec.mmr} MMR → ${nb.emoji} ${nb.name}`;
-        label = `+${nb.mmrMin - rec.mmr} MMR to next rank`;
+        else nextTxt = `+${nb.mmrMin - recShown} MMR → ${nb.emoji} ${nb.name}`;
+        label = `+${nb.mmrMin - recShown} MMR to next rank`;
       }
       rankHtml = `<div class="rankpanel" style="--c:${rb.color}">
         <div class="rank-badge">${rb.emoji}</div>
@@ -1503,17 +1765,23 @@ function renderWorkout() {
 function renderChart() {
   const grid = document.getElementById("rankGrid");
   grid.innerHTML = "";
+  const locked = !isPremium();   // free users: mark beasts above Alligator as locked
   BEASTS.forEach((b, i) => {
+    const isLocked = locked && tierOf(b.id) > ALLIGATOR_TIER;
     const el = document.createElement("div");
-    el.className = "card";
+    el.className = "card" + (isLocked ? " card-locked" : "");
     el.style.setProperty("--c", b.color);
     el.style.animationDelay = `${i * 0.04}s`;
+    // the gallery is aspirational — show ALL beasts, just flag premium-only ones with
+    // a 🔒 so free users see what's behind the gate (tapping opens Go Premium).
     el.innerHTML = `
-      <div class="emoji">${b.emoji}</div>
+      <div class="emoji">${b.emoji}${isLocked ? `<span class="card-lock">🔒</span>` : ""}</div>
       <div class="name">${b.name}</div>
       <div class="stats"><div><span>Rank</span><b>MMR ${beastRange(b)}</b></div></div>`;
+    if (isLocked) el.setAttribute("data-gopremium", "");
     grid.appendChild(el);
   });
+  wireGoPremium(grid);
 }
 
 // ===== your ranks (best per exercise + progress to next tier) =====
@@ -1530,16 +1798,23 @@ function renderYourRanks() {
     .sort((a, b) => mmrOrZero(b.id) - mmrOrZero(a.id) || bests[b.id].oneRM - bests[a.id].oneRM)
     .forEach((e) => {
       const rec = bests[e.id];
-      const b = classify(rec.mmr) || byId(rec.beast) || BEASTS[0];
+      const realBeast = classify(rec.mmr) || byId(rec.beast) || BEASTS[0];
+      // CAP for free users (display only): beast clamps at Alligator, MMR at 125.
+      const b = shownBeast(realBeast);
       const ti = tierOf(b.id);
-      let next = "", pct = 100;
       const hasMmr = typeof rec.mmr === "number";
-      if (ti < BEASTS.length && hasMmr) {
+      const shownVal = shownMMR(rec.mmr);
+      let next = "", pct = 100;
+      if (hasMmr && cappedAtAlligator(rec.mmr)) {
+        // free user at/over the Alligator ceiling → Go Premium CTA instead of a target.
+        pct = 100;
+        next = `<div class="rankrow-next rankrow-locked" data-gopremium>🔒 Go Premium to rank past Alligator</div>`;
+      } else if (ti < BEASTS.length && hasMmr) {
         const nb = BEASTS[ti];               // next tier beast
         const span = nb.mmrMin - b.mmrMin;
-        pct = Math.max(4, Math.min(100, Math.round(((rec.mmr - b.mmrMin) / span) * 100)));
+        pct = Math.max(4, Math.min(100, Math.round(((shownVal - b.mmrMin) / span) * 100)));
         const cmp = nextRankCompare(e, rec.oneRM, nb.mmrMin, profile.bodyweight);
-        const tgt = cmp ? `${cmp} for` : `+${nb.mmrMin - rec.mmr} MMR →`;
+        const tgt = cmp ? `${cmp} for` : `+${nb.mmrMin - shownVal} MMR →`;
         next = `<div class="rankrow-next">${tgt} ${nb.emoji} ${nb.name}</div>`;
       } else if (!hasMmr) {
         next = `<div class="rankrow-next">Set bodyweight to rank up</div>`;
@@ -1549,7 +1824,7 @@ function renderYourRanks() {
       const row = document.createElement("div");
       row.className = "rankrow";
       row.style.setProperty("--c", b.color);
-      const mmrTxt = hasMmr ? rec.mmr.toLocaleString() : "—";
+      const mmrTxt = hasMmr ? shownVal.toLocaleString() : "—";
       row.innerHTML = `
         <div class="rankrow-top">
           <span class="rankrow-ex">${exThumb(e)}<span class="rankrow-name">${e.name}</span></span>
@@ -1559,6 +1834,20 @@ function renderYourRanks() {
         <div class="rankrow-foot">${next}<span class="rankrow-mmr">MMR ${mmrTxt}</span></div>`;
       box.appendChild(row);
     });
+  wireGoPremium(box);
+}
+
+// wire any [data-gopremium] element inside `root` to open the Go Premium page. Safe
+// to call repeatedly (binds once per element via a dataset flag). Load-order safe —
+// only ever called from render functions.
+function wireGoPremium(root) {
+  if (!root) return;
+  root.querySelectorAll("[data-gopremium]").forEach((el) => {
+    if (el.dataset.gpwired) return;
+    el.dataset.gpwired = "1";
+    el.style.cursor = "pointer";
+    el.addEventListener("click", () => { try { switchTab("premium-page"); } catch (e) {} });
+  });
 }
 
 // ===== routines (reusable workout templates) =====
@@ -2502,8 +2791,10 @@ function renderProfileAchievements() {
 // ===== home dashboard =====
 function renderHome() {
   const hero = document.getElementById("rankHero");
-  const b = overallBeast();
-  const mmr = overallMMR();
+  // CAP for free users: never show a beast above Alligator or an MMR above 125. The
+  // stored MMR/bests are untouched — going premium just reveals the real values.
+  const b = shownBeast(overallBeast());
+  const mmr = shownMMR(overallMMR());
   const mmrBadge = `<div class="rh-mmr"><span>MMR</span><b>${mmr != null ? mmr.toLocaleString() : "—"}</b></div>`;
   if (!b) {
     hero.style.setProperty("--c", "#5b6168");
@@ -2556,6 +2847,15 @@ function refreshAvatars() {
   if (menuAv) menuAv.innerHTML = avatarInner();
   const menuName = document.getElementById("menuProfileName");
   if (menuName) menuName.textContent = profile.name ? profile.name : "Your Profile";
+  // keep the Menu premium button label in sync (Go Premium → 👑 Premium when active).
+  const goLbl = document.getElementById("goPremiumLbl");
+  if (goLbl) goLbl.textContent = isPremium() ? "Premium" : "Go Premium";
+  const goBtn = document.getElementById("goPremiumBtn");
+  if (goBtn) {
+    goBtn.classList.toggle("owned", isPremium());
+    const ico = goBtn.querySelector("span");
+    if (ico) ico.textContent = isPremium() ? "👑" : "⭐";
+  }
 }
 
 // earliest dated activity (workout or set) → a "Member since" string, or null.
@@ -2578,7 +2878,8 @@ function topLift() {
   }
   if (!best) return null;
   const ex = exById(best.id);
-  return { name: ex ? ex.name : best.id, beast: classify(best.mmr) };
+  // CAP the displayed beast for free users (real best is untouched).
+  return { name: ex ? ex.name : best.id, beast: shownBeast(classify(best.mmr)) };
 }
 
 // Resolve the stored favorite into a display object, tolerating a missing/stale id.
@@ -2590,8 +2891,9 @@ function favoriteLift() {
   const ex = exById(id);
   if (!ex) return null;                          // stale id (e.g. deleted custom exercise)
   const rec = bests[id];
-  const beast = rec && typeof rec.mmr === "number" ? classify(rec.mmr) : null;
-  return { name: ex.name, beast, mmr: rec && typeof rec.mmr === "number" ? rec.mmr : null };
+  // CAP the displayed beast + MMR for free users (real best is untouched).
+  const beast = rec && typeof rec.mmr === "number" ? shownBeast(classify(rec.mmr)) : null;
+  return { name: ex.name, beast, mmr: rec && typeof rec.mmr === "number" ? shownMMR(rec.mmr) : null };
 }
 
 // Build <optgroup>-grouped <option>s for the favorite-lift <select>, preserving the
@@ -2618,8 +2920,9 @@ function favoriteSelectHtml() {
 }
 
 function renderProfile() {
-  const b = overallBeast();
-  const mmr = overallMMR();
+  // CAP for free users (display only) — real MMR/bests untouched.
+  const b = shownBeast(overallBeast());
+  const mmr = shownMMR(overallMMR());
   const hero = document.getElementById("profileHero");
   if (hero) {
     hero.style.setProperty("--c", b ? b.color : "#5b6168");
@@ -2645,7 +2948,7 @@ function renderProfile() {
       ${profile.username
         ? `<button type="button" class="ph-handle" id="phHandle">@${escapeHtml(profile.username)}</button>`
         : (cloudUser ? `<button type="button" class="ph-handle ph-handle-empty" id="phHandle">+ set @handle</button>` : "")}
-      <div class="ph-rank">${rankTxt}</div>
+      <div class="ph-rank">${rankTxt}${isPremium() ? ` <span class="premium-badge">👑 PREMIUM</span>` : ""}</div>
       <div class="ph-mmr"><span>Overall MMR</span><b>${mmr != null ? mmr.toLocaleString() : "—"}</b></div>
       ${profile.bio ? `<div class="ph-bio">${escapeHtml(profile.bio)}</div>` : ""}
       ${ms ? `<div class="ph-member">Member since ${ms}</div>` : ""}`;
@@ -3095,7 +3398,7 @@ function renderHistory() {
   } else {
     prBox.innerHTML = "";
     ranked.sort((a, b) => bests[b.id].oneRM - bests[a.id].oneRM).forEach((e) => {
-      const rec = bests[e.id]; const b = classify(rec.mmr) || byId(rec.beast) || BEASTS[0];
+      const rec = bests[e.id]; const b = shownBeast(classify(rec.mmr) || byId(rec.beast) || BEASTS[0]);
       const row = document.createElement("div");
       row.className = "rankrow"; row.style.setProperty("--c", b.color);
       row.innerHTML = `
@@ -3116,8 +3419,8 @@ function renderHistory() {
   dayBox.innerHTML = "";
   days.forEach((d) => {
     const daySets = byDay[d];
-    const topBeast = daySets.map((s) => classify(s.mmr) || byId(s.beast)).filter(Boolean)
-      .sort((a, b) => tierOf(b.id) - tierOf(a.id))[0] || BEASTS[0];
+    const topBeast = shownBeast(daySets.map((s) => classify(s.mmr) || byId(s.beast)).filter(Boolean)
+      .sort((a, b) => tierOf(b.id) - tierOf(a.id))[0] || BEASTS[0]);
     const row = document.createElement("div");
     row.className = "dayrow";
     row.innerHTML = `
@@ -3133,13 +3436,15 @@ function renderHistory() {
 // ===== flex card =====
 const flexModal = document.getElementById("flexModal");
 document.getElementById("flexBtn").addEventListener("click", () => {
-  const b = overallBeast();
+  // CAP for free users (display only) — real MMR/bests untouched.
+  const b = shownBeast(overallBeast());
+  const oMmr = shownMMR(overallMMR());
   const streak = computeStreak();
   const ranked = EXERCISES().filter((e) => bests[e.id])
     .sort((a, b2) => bests[b2.id].oneRM - bests[a.id].oneRM).slice(0, 3);
   const lifts = ranked.map((e) => {
     const rec = bests[e.id];
-    const fb = classify(rec.mmr) || byId(rec.beast) || BEASTS[0];
+    const fb = shownBeast(classify(rec.mmr) || byId(rec.beast) || BEASTS[0]);
     return `<div class="fc-lift"><span>${fb.emoji} ${e.name}</span><b>~${toDisplayWeight(rec.oneRM)} ${unitLabel()}</b></div>`;
   }).join("") || `<div class="fc-lift"><span>No lifts logged yet</span><b>—</b></div>`;
 
@@ -3149,7 +3454,7 @@ document.getElementById("flexBtn").addEventListener("click", () => {
     <div class="fc-rank">${b ? b.name : "Unranked"}</div>
     <div class="fc-tier">${b ? `MMR ${beastRange(b)}` : "Log a workout to rank up"}</div>
     <div class="fc-stats">
-      <div class="fc-stat"><b>${overallMMR() != null ? overallMMR().toLocaleString() : "—"}</b><span>MMR</span></div>
+      <div class="fc-stat"><b>${oMmr != null ? oMmr.toLocaleString() : "—"}</b><span>MMR</span></div>
       <div class="fc-stat"><b>${streak}</b><span>day streak</span></div>
       <div class="fc-stat"><b>${Object.keys(bests).length}</b><span>ranked lifts</span></div>
     </div>
@@ -3427,6 +3732,38 @@ function renderHeatmap() {
 }
 
 function renderProgress() {
+  // PREMIUM GATE: the charts + heatmap are premium-only. Non-premium sees a lock
+  // state instead. The blocks are hidden (not removed) so going premium repaints
+  // them on the next render. A reusable #progLock node holds the lock CTA.
+  const panel = document.getElementById("progress");
+  const blocks = panel ? panel.querySelectorAll(".prog-block") : [];
+  const shareBtn = document.getElementById("progShareBtn");
+  let lock = document.getElementById("progLock");
+  if (!isPremium()) {
+    blocks.forEach((b) => b.classList.add("hidden"));
+    if (shareBtn) shareBtn.classList.add("hidden");
+    if (!lock && panel) {
+      lock = document.createElement("div");
+      lock.id = "progLock";
+      lock.className = "lockstate";
+      lock.innerHTML = `
+        <div class="lock-emoji">🔒</div>
+        <div class="lock-title">Progress charts are a Premium feature</div>
+        <p class="lock-sub">MMR over time, per-lift strength, bodyweight, volume &amp; your training heatmap.</p>
+        <button class="btn premium-sub" data-gopremium type="button">👑 Go Premium</button>`;
+      const after = panel.querySelector(".section-title");
+      if (after && after.nextSibling) panel.insertBefore(lock, after.nextSibling);
+      else panel.appendChild(lock);
+      wireGoPremium(lock);
+    }
+    if (lock) lock.classList.remove("hidden");
+    return;
+  }
+  // premium: show everything, hide the lock if present.
+  if (lock) lock.classList.add("hidden");
+  blocks.forEach((b) => b.classList.remove("hidden"));
+  if (shareBtn) shareBtn.classList.remove("hidden");
+
   // training calendar heatmap (guarded; renders its own empty state)
   try { renderHeatmap(); } catch (e) {}
 
@@ -3491,7 +3828,8 @@ const rankCanvas = document.getElementById("rankCanvas");
 function drawRankCard() {
   const cv = rankCanvas, ctx = cv.getContext("2d");
   const W = cv.width, H = cv.height;
-  const b = overallBeast();
+  // CAP for free users (display only) — the shared card never reveals past Alligator.
+  const b = shownBeast(overallBeast());
   // equipped rank-card theme (owner-only). Guarded: a missing/removed theme → default
   // palette (beast-accent green card). theme.accent overrides the beast color when set.
   const theme = equippedCosmetic("theme");
@@ -3499,7 +3837,7 @@ function drawRankCard() {
   const wordmarkColor = theme && theme.wordmark ? theme.wordmark : "#f2c14e";
   const bgTop = theme && theme.bg ? theme.bg[0] : "#0e2a1f";
   const bgBot = theme && theme.bg ? theme.bg[1] : "#06140d";
-  const mmr = overallMMR();
+  const mmr = shownMMR(overallMMR());
   const streak = computeStreak();
   const liftCount = Object.keys(bests).length;
 
@@ -3583,7 +3921,7 @@ function drawRankCard() {
   if (ranked.length) {
     ranked.forEach((e) => {
       const rec = bests[e.id];
-      const fb = classify(rec.mmr) || byId(rec.beast) || BEASTS[0];
+      const fb = shownBeast(classify(rec.mmr) || byId(rec.beast) || BEASTS[0]);
       ctx.font = "600 40px Sora, sans-serif";
       ctx.fillStyle = "#eaf5ee";
       ctx.textAlign = "left";
@@ -4443,7 +4781,9 @@ async function doPublishPublicProfile() {
       small = await downscaleDataUrl(profile.avatar, 96, 0.6);
       lastPublishedAvatar = { src: profile.avatar, small };
     }
-    const ob = (typeof overallBeast === "function") ? overallBeast() : null;
+    // CAP for free users: publish the capped overall MMR + beast so others see them
+    // capped too. Premium publishes the real values. Stored MMR/bests are untouched.
+    const ob = (typeof overallBeast === "function") ? shownBeast(overallBeast()) : null;
     // publish ONLY the socially-visible equipped cosmetics (frame + nameColor) — themes
     // and borders only matter on the owner's own screen/card, so keep the blob small.
     // Guarded; falls back to null so legacy rows / errors never break the upsert.
@@ -4457,7 +4797,7 @@ async function doPublishPublicProfile() {
       username: profile.username,
       name: (profile.name || "").slice(0, 24),
       avatar: small || null,
-      overall_mmr: (typeof overallMMR === "function" && overallMMR()) || 0,
+      overall_mmr: (typeof overallMMR === "function" && shownMMR(overallMMR())) || 0,
       beast_id: ob ? ob.id : null,
       streak: (typeof computeStreak === "function" && computeStreak()) || 0,
       cosmetics: cosmetics,
@@ -4526,7 +4866,7 @@ async function submitUsername() {
   try {
     // attempt the claim by upserting our row with the chosen handle. The unique index
     // on lower(username) rejects a taken handle with a 23505 unique-violation.
-    const ob = (typeof overallBeast === "function") ? overallBeast() : null;
+    const ob = (typeof overallBeast === "function") ? shownBeast(overallBeast()) : null;
     let small = lastPublishedAvatar.small;
     if (profile.avatar !== lastPublishedAvatar.src) {
       small = await downscaleDataUrl(profile.avatar, 96, 0.6);
@@ -4537,7 +4877,7 @@ async function submitUsername() {
       username: val,
       name: (profile.name || "").slice(0, 24),
       avatar: small || null,
-      overall_mmr: (typeof overallMMR === "function" && overallMMR()) || 0,
+      overall_mmr: (typeof overallMMR === "function" && shownMMR(overallMMR())) || 0,
       beast_id: ob ? ob.id : null,
       streak: (typeof computeStreak === "function" && computeStreak()) || 0,
       updated_at: new Date().toISOString(),
@@ -4879,10 +5219,11 @@ async function loadFriendsBoard() {
   const profs = await fetchProfiles(ids);
   // ensure MY row exists even if not yet published (use live local stats as fallback).
   if (!profs[cloudUser.id]) {
-    const ob = (typeof overallBeast === "function") ? overallBeast() : null;
+    // local-fallback "me" row uses the CAPPED values for free users (matches publish).
+    const ob = (typeof overallBeast === "function") ? shownBeast(overallBeast()) : null;
     profs[cloudUser.id] = {
       user_id: cloudUser.id, username: profile.username, name: profile.name,
-      avatar: profile.avatar, overall_mmr: (overallMMR && overallMMR()) || 0,
+      avatar: profile.avatar, overall_mmr: (overallMMR && shownMMR(overallMMR())) || 0,
       beast_id: ob ? ob.id : null,
     };
   }
@@ -4907,7 +5248,7 @@ async function loadGlobalBoard() {
     const inTop = list.some((p) => p.user_id === cloudUser.id);
     if (!inTop) {
       // compute my global rank = (# of profiles with a strictly higher MMR) + 1.
-      const myMmr = (overallMMR && overallMMR()) || 0;
+      const myMmr = (overallMMR && shownMMR(overallMMR())) || 0;
       let myRank = null;
       try {
         const { count } = await supa.from("public_profiles")
@@ -4915,7 +5256,7 @@ async function loadGlobalBoard() {
           .gt("overall_mmr", myMmr);
         if (typeof count === "number") myRank = count + 1;
       } catch (e) {}
-      const ob = (typeof overallBeast === "function") ? overallBeast() : null;
+      const ob = (typeof overallBeast === "function") ? shownBeast(overallBeast()) : null;
       const meP = { username: profile.username, name: profile.name, avatar: profile.avatar,
         overall_mmr: myMmr, beast_id: ob ? ob.id : null };
       html += `<div class="lb-divider">your rank</div>` + boardRowHtml(myRank || "—", meP, true);
