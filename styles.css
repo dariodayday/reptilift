@@ -795,6 +795,13 @@ body {
 .acct-email { font-size: 15px; font-weight: 800; word-break: break-all; }
 .acct-sync { font-size: 12px; color: var(--accent); font-weight: 700; }
 
+/* manual backup / restore controls on the Account page */
+.acct-sync-actions { display: flex; gap: 8px; margin: 14px 0 4px; }
+.acct-sync-actions .btn.small { flex: 1; padding: 9px 6px; font-size: 13px; }
+.acct-sync-msg { font-size: 12px; font-weight: 700; min-height: 16px; margin-bottom: 10px; }
+.acct-sync-msg.ok { color: var(--accent); }
+.acct-sync-msg.err { color: #ff8a7a; }
+
 /* sync status dot in the section header */
 .syncdot { width: 10px; height: 10px; border-radius: 50%; background: var(--line); }
 .syncdot.ok { background: var(--accent); box-shadow: 0 0 8px color-mix(in srgb, var(--accent) 70%, transparent); }

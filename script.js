@@ -1,4 +1,4 @@
-// Reptilift v3.48 — earn your beast rank per exercise from your MMR.
+// Reptilift v3.49 — earn your beast rank per exercise from your MMR.
 // v3.47 adds to the premium calorie tracker: a FOOD_DB search (built-in ~150 foods +
 // OpenFoodFacts online lookup, debounced + graceful-degrade offline) with a quantity
 // multiplier, and PHOTO logging (downscaled JPEG data URL on the optional entry.photo,
@@ -337,7 +337,17 @@ const BASE_EXERCISES = [
 ];
 
 // ===== state =====
-let profile = JSON.parse(localStorage.getItem("reptilift_profile") || '{"bodyweight":null}');
+// safeParse(key, fallback): parse a localStorage value, returning `fallback` on a
+// missing key, the literal "null" string, OR a corrupt/truncated value that would
+// otherwise throw. Defined HERE (before the core loads below) so a single corrupt
+// key degrades to its default instead of throwing at module top-level (which would
+// black-screen the app and risk a defaults-clobber on the next save). Returns the
+// parsed value only when it is a non-null object (covers both {} and [] defaults).
+function safeParse(key, fallback) {
+  try { const v = JSON.parse(localStorage.getItem(key)); return v && typeof v === "object" ? v : fallback; }
+  catch (e) { return fallback; }
+}
+let profile = safeParse("reptilift_profile", { bodyweight: null });
 // guard the profile shape: older saves only had {bodyweight}. name/bio/avatar are
 // optional strings; avatar is a (possibly large) data URL. Normalize defensively so
 // nothing downstream throws on a missing/corrupt field.
@@ -381,14 +391,14 @@ if (!profile.cosmetics.equipped || typeof profile.cosmetics.equipped !== "object
 ["theme", "frame", "nameColor", "border"].forEach((slot) => {
   if (typeof profile.cosmetics.equipped[slot] !== "string") profile.cosmetics.equipped[slot] = "";
 });
-let sets = JSON.parse(localStorage.getItem("reptilift_sets") || "[]");   // every set, all time
-let bests = JSON.parse(localStorage.getItem("reptilift_bests") || "{}"); // exId -> {beast, oneRM, date}
-let customEx = JSON.parse(localStorage.getItem("reptilift_customex") || "[]");
+let sets = safeParse("reptilift_sets", []);   // every set, all time
+let bests = safeParse("reptilift_bests", {}); // exId -> {beast, oneRM, date}
+let customEx = safeParse("reptilift_customex", []);
 let soundOn = localStorage.getItem("reptilift_sound") !== "off";  // default ON; gates SFX + haptics
 // dated bodyweight history for the Progress trend. [{date:"YYYY-MM-DD", bw:Number}]
 // (one entry per day — same-day changes overwrite). Seeded below from the current
 // profile bodyweight if the log is empty but a bodyweight is already set.
-let bwLog = JSON.parse(localStorage.getItem("reptilift_bwlog") || "[]");
+let bwLog = safeParse("reptilift_bwlog", []);
 if (!Array.isArray(bwLog)) bwLog = [];
 function saveBwLog() { localStorage.setItem("reptilift_bwlog", JSON.stringify(bwLog)); }
 // record today's bodyweight, replacing any existing entry for today; keeps the log
@@ -411,11 +421,8 @@ function logBodyweight(bw) {
 // quests:   { claimed:{id:true}, lifetime:{...}, daily:{date, ...counters, claimed:{}} }
 // streakx:  { bridges:[YYYY-MM-DD], lastFreeze } days the streak was rescued by an
 //           item (a freeze auto-spent on a gap, or a restorer manually applied).
-// All shapes are guarded by safeParse so corrupt/missing data falls back cleanly.
-function safeParse(key, fallback) {
-  try { const v = JSON.parse(localStorage.getItem(key)); return v && typeof v === "object" ? v : fallback; }
-  catch (e) { return fallback; }
-}
+// All shapes are guarded by safeParse (defined above) so corrupt/missing data falls
+// back cleanly.
 let wallet    = safeParse("reptilift_wallet", { balance: 0 });
 let inventory = safeParse("reptilift_inventory", { restorer: 0, freeze: 0, booster: 0 });
 let quests    = safeParse("reptilift_quests", { claimed: {}, lifetime: {}, daily: {} });
@@ -1474,10 +1481,12 @@ function buzz(pattern) {
 }
 
 // ===== active workout session =====
-let workout = JSON.parse(localStorage.getItem("reptilift_active") || "null");
-let workouts = JSON.parse(localStorage.getItem("reptilift_workouts") || "[]");
-let lastSets = JSON.parse(localStorage.getItem("reptilift_lastsets") || "{}"); // exId -> [{lbs,reps,added}] from last session (PREV column)
-let routines = JSON.parse(localStorage.getItem("reptilift_routines") || "[]"); // [{id,name,exercises:[{exId,sets,reps}]}]
+// workout default is null (no active session) — safeParse returns the fallback for a
+// missing/"null"/corrupt value, so a degraded key won't black-screen the app.
+let workout = safeParse("reptilift_active", null);
+let workouts = safeParse("reptilift_workouts", []);
+let lastSets = safeParse("reptilift_lastsets", {}); // exId -> [{lbs,reps,added}] from last session (PREV column)
+let routines = safeParse("reptilift_routines", []); // [{id,name,exercises:[{exId,sets,reps}]}]
 const saveWorkout = () => {
   localStorage.setItem("reptilift_active", JSON.stringify(workout));
   localStorage.setItem("reptilift_workouts", JSON.stringify(workouts));
@@ -1958,9 +1967,13 @@ function renderWorkout() {
     if (rb) {
       const recShown = rec ? shownMMR(rec.mmr) : null;
       const ti = tierOf(rb.id); let pct = 100, nextTxt = "🐙 Apex beast — maxed out", label = "Next rank";
-      if (rec && cappedAtAlligator(rec.mmr)) {
-        // free user at the Alligator ceiling → Go Premium nudge instead of a target.
-        pct = 100; label = "Rank capped"; nextTxt = "🔒 Go Premium to rank past Alligator";
+      let goPrem = false;   // when true, the panel becomes a tappable Go Premium CTA
+      // free user at OR above the Alligator tier (real MMR ≥ 51, even below the 125
+      // ceiling) → Go Premium nudge. Without this, a free lifter mid-Alligator would
+      // see the LOCKED next beast (Eagle) name + a concrete target, leaking premium.
+      const realB = rec ? classify(rec.mmr) : null;
+      if (rec && !isPremium() && realB && tierOf(realB.id) >= ALLIGATOR_TIER) {
+        pct = 100; label = "Rank capped"; nextTxt = "🔒 Go Premium to rank past Alligator"; goPrem = true;
       } else if (ti < BEASTS.length) {
         const nb = BEASTS[ti]; const span = nb.mmrMin - rb.mmrMin;
         pct = Math.max(5, Math.min(100, Math.round(((recShown - rb.mmrMin) / span) * 100)));
@@ -1971,7 +1984,7 @@ function renderWorkout() {
         else nextTxt = `+${nb.mmrMin - recShown} MMR → ${nb.emoji} ${nb.name}`;
         label = `+${nb.mmrMin - recShown} MMR to next rank`;
       }
-      rankHtml = `<div class="rankpanel" style="--c:${rb.color}">
+      rankHtml = `<div class="rankpanel"${goPrem ? " data-gopremium" : ""} style="--c:${rb.color}">
         <div class="rank-badge">${rb.emoji}</div>
         <div class="rank-info">
           <div class="rank-next"><span>${label}</span><b>${nextTxt}</b></div>
@@ -2043,6 +2056,8 @@ function renderWorkout() {
     setField(+inp.dataset.i, +inp.dataset.j, "lbs", lb);
   }));
   list.querySelectorAll(".st-reps").forEach((inp) => inp.addEventListener("input", () => setField(+inp.dataset.i, +inp.dataset.j, "reps", inp.value)));
+  // make any rankpanel Go Premium CTA (free user at/above Alligator) open #premium-page.
+  wireGoPremium(list);
 }
 
 // ===== food-chain reference cards =====
@@ -2089,8 +2104,10 @@ function renderYourRanks() {
       const hasMmr = typeof rec.mmr === "number";
       const shownVal = shownMMR(rec.mmr);
       let next = "", pct = 100;
-      if (hasMmr && cappedAtAlligator(rec.mmr)) {
-        // free user at/over the Alligator ceiling → Go Premium CTA instead of a target.
+      // free user at OR above the Alligator tier (real MMR ≥ 51, even below the 125
+      // ceiling) → Go Premium CTA. Without this, a free lifter mid-Alligator would
+      // see the LOCKED next beast (Eagle) name + a concrete target, leaking premium.
+      if (hasMmr && !isPremium() && tierOf(realBeast.id) >= ALLIGATOR_TIER) {
         pct = 100;
         next = `<div class="rankrow-next rankrow-locked" data-gopremium>🔒 Go Premium to rank past Alligator</div>`;
       } else if (ti < BEASTS.length && hasMmr) {
@@ -4648,6 +4665,9 @@ const ax = {
   emailLbl:    document.getElementById("acctEmailLbl"),
   syncLbl:     document.getElementById("acctSyncLbl"),
   logout:      document.getElementById("acctLogout"),
+  backup:      document.getElementById("acctBackup"),
+  restore:     document.getElementById("acctRestore"),
+  syncMsg:     document.getElementById("acctSyncMsg"),
   dot:         document.getElementById("syncDot"),
   chip:        document.getElementById("acctChip"),
   chipLbl:     document.getElementById("acctChipLbl"),
@@ -4753,6 +4773,22 @@ function localHasRealData() {
     if (Array.isArray(sets) && sets.length) return true;
     if (Array.isArray(workouts) && workouts.length) return true;
     if (profile && (profile.premium || profile.bodyweight || profile.name || profile.username || profile.avatar)) return true;
+    // ALSO trust the persisted keys directly: if the device has logged sets/bests/
+    // workouts/routines/calories/bodyweight saved (even if the in-memory globals are
+    // momentarily degraded), it is NOT a fresh device and must not be overwritten by
+    // an old cloud snapshot on login. A non-empty stored object/array counts.
+    const hasStored = (key) => {
+      const raw = localStorage.getItem(key);
+      if (raw == null) return false;
+      try {
+        const v = JSON.parse(raw);
+        if (Array.isArray(v)) return v.length > 0;
+        if (v && typeof v === "object") return Object.keys(v).length > 0;
+        return v != null;
+      } catch (e) { return raw.length > 0; }   // unparseable-but-present still counts as data
+    };
+    if (["reptilift_sets", "reptilift_bests", "reptilift_workouts",
+         "reptilift_routines", "reptilift_calories", "reptilift_bwlog"].some(hasStored)) return true;
   } catch (e) {}
   return false;
 }
@@ -4950,6 +4986,55 @@ if (ax.logout) ax.logout.addEventListener("click", async () => {
   // onAuthStateChange will fire SIGNED_OUT → onLogout; call it directly too in
   // case the event is delayed.
   onLogout();
+});
+
+// brief inline status under the backup/restore buttons (auto-clears).
+let acctSyncMsgT = null;
+function acctSyncMsg(text, kind) {
+  if (!ax.syncMsg) return;
+  ax.syncMsg.textContent = text || "";
+  ax.syncMsg.className = "acct-sync-msg" + (kind ? " " + kind : "");
+  clearTimeout(acctSyncMsgT);
+  if (text) acctSyncMsgT = setTimeout(() => { if (ax.syncMsg) { ax.syncMsg.textContent = ""; ax.syncMsg.className = "acct-sync-msg"; } }, 4000);
+}
+
+// "↑ Back up now" — force an immediate cloud push (no debounce) + inline status.
+if (ax.backup) ax.backup.addEventListener("click", async () => {
+  if (!supa || !cloudUser) return;
+  acctSyncMsg("Backing up…", "");
+  try {
+    const { error } = await supa.from("progress").upsert(
+      { user_id: cloudUser.id, data: gatherLocal(), updated_at: new Date().toISOString() },
+      { onConflict: "user_id" }
+    );
+    if (error) throw error;
+    setSyncStatus("synced");
+    acctSyncMsg("Backed up ✓", "ok");
+  } catch (e) {
+    setSyncStatus("offline");
+    acctSyncMsg("Backup failed — offline", "err");
+  }
+});
+
+// "↻ Restore from cloud" — confirm, fetch the cloud row, applyCloud() (reloads).
+if (ax.restore) ax.restore.addEventListener("click", async () => {
+  if (!supa || !cloudUser) return;
+  if (!confirm("Replace this device's data with your last cloud backup? This can't be undone.")) return;
+  acctSyncMsg("Restoring…", "");
+  try {
+    const { data: row, error } = await supa
+      .from("progress").select("data").eq("user_id", cloudUser.id).maybeSingle();
+    if (error) throw error;
+    const cloud = row && row.data;
+    if (!cloud || typeof cloud !== "object" || !Object.keys(cloud).length) {
+      acctSyncMsg("", "");
+      alert("No cloud backup found.");
+      return;
+    }
+    applyCloud(cloud);   // overwrites local keys + reloads
+  } catch (e) {
+    acctSyncMsg("Restore failed — offline", "err");
+  }
 });
 
 // Clicking the top avatar chip opens the Profile page (the user's hub). Account &

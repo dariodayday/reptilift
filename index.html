@@ -116,6 +116,11 @@
               <div class="acct-sync" id="acctSyncLbl">Synced ✓</div>
             </div>
           </div>
+          <div class="acct-sync-actions">
+            <button class="btn ghost small" id="acctBackup" type="button">↑ Back up now</button>
+            <button class="btn ghost small" id="acctRestore" type="button">↻ Restore from cloud</button>
+          </div>
+          <div class="acct-sync-msg" id="acctSyncMsg" aria-live="polite"></div>
           <button class="btn ghost" id="acctLogout" type="button">Log out</button>
         </div>
       </div>
@@ -579,7 +584,7 @@
     </section>
 
     <footer class="footer">
-      Reptilift v9.57 — rough cut
+      Reptilift v9.58 — rough cut
       <button id="replayIntro" class="replay">↻ replay intro</button>
     </footer>
 
