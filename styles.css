@@ -1305,6 +1305,14 @@ body {
 .cos-item.on .cos-tag { color: var(--gold); }
 .cos-act { width: 100%; padding: 8px 10px; font-size: 13px; }
 .cos-eq { font-size: 13px; font-weight: 800; color: var(--gold); padding: 8px 0; }
+/* APEX-exclusive cosmetics: gold-flagged tag + subtle gold tint on the card */
+.cos-item.cos-apex { border-color: color-mix(in srgb, var(--gold) 45%, transparent); }
+.cos-apextag {
+  display: inline-block; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em;
+  color: #0c0e0d; background: linear-gradient(135deg,#ffe39a,#ffb000); border-radius: 6px; padding: 1px 6px; margin-top: 2px;
+}
+.cos-apextag.locked { color: var(--gold); background: none; border: 1px solid color-mix(in srgb, var(--gold) 55%, transparent); }
+.cos-apexcta { background: linear-gradient(135deg,#ffe39a,#ffb000) !important; color: #0c0e0d !important; border: none !important; }
 /* previews — each mirrors how the item looks on the profile */
 .cos-prev { display: grid; place-items: center; flex: none; }
 /* THEME: mini rank-card swatch (bg gradient + accent bar/dot + wordmark) */
@@ -1354,6 +1362,7 @@ body {
   border: 1px solid color-mix(in srgb, var(--gold) 38%, transparent);
 }
 .rv-boost { font-size: 12px; color: var(--accent); margin-left: 4px; }
+.rv-boost.rv-apex { color: var(--gold); }
 
 /* ===== ranks page actions ===== */
 .ranks-actions { display: flex; gap: 10px; margin-bottom: 16px; }
@@ -1765,6 +1774,24 @@ button.fr-card:active { background: var(--card2); }
 .cal-summary .progress { height: 10px; }
 .cal-summary .progress i { background: var(--c, var(--accent)); }
 .cal-remain { margin-top: 8px; font-size: 13px; color: var(--muted); font-weight: 600; }
+/* goal grid: kcal + P/C/F goal inputs side by side */
+.cal-goalgrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.cal-goalgrid .pe-label { margin: 0; }
+/* macro bars under the calories bar */
+.cal-macros-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 14px; }
+.cal-macro .cal-macro-top { display: flex; align-items: baseline; justify-content: space-between; gap: 4px; margin-bottom: 4px; }
+.cal-macro-lbl { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+.cal-macro-val { font-size: 12px; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--c, var(--accent)); }
+.cal-macro-val em { font-style: normal; color: var(--muted); font-weight: 600; }
+.cal-macro .progress { height: 6px; }
+.cal-macro .progress i { background: var(--c, var(--accent)); }
+/* manual macro fields row */
+.cal-macrorow { margin-top: 8px; }
+.cal-mfield {
+  display: flex; align-items: center; gap: 4px; flex: 1; color: var(--muted); font-weight: 700; font-size: 13px;
+  background: var(--bg); border: 1px solid var(--line); border-radius: var(--r-input); padding-left: 10px;
+}
+.cal-mfield input { width: 100%; min-width: 0; border: none !important; background: transparent !important; padding: 12px 8px 12px 2px !important; }
 /* food search */
 .cal-search { position: relative; margin-bottom: 8px; }
 .cal-search #calSearch {
@@ -1831,7 +1858,9 @@ button.fr-card:active { background: var(--card2); }
   display: flex; align-items: center; gap: 10px; background: var(--card);
   border: 1px solid var(--line); border-radius: var(--r-chip); padding: 11px 12px;
 }
-.cal-e-name { flex: 1; font-size: 14px; }
+.cal-e-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.cal-e-name { font-size: 14px; }
+.cal-e-macros { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .cal-e-kcal { font-weight: 800; font-variant-numeric: tabular-nums; color: var(--gold); }
 .cal-e-del { background: none; border: none; color: var(--muted); font-size: 15px; cursor: pointer; padding: 2px 4px; }
 .cal-e-del:hover { color: #e0563b; }

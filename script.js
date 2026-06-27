@@ -1,4 +1,8 @@
-// Reptilift v3.52 — earn your beast rank per exercise from your MMR.
+// Reptilift v3.53 — earn your beast rank per exercise from your MMR.
+// v3.53 adds macros (protein/carbs/fat) to the Apex calorie tracker — per-macro goals,
+// FOOD_DB + OpenFoodFacts macro data, manual macro fields, and P/C/F totals/bars —
+// plus more Apex perks: 2× Scales from workouts & quest claims and three Apex-exclusive
+// cosmetics (Apex Gold theme, Apex Crown frame, Apex name color).
 // v3.52 moves the Progress charts + training heatmap onto the Profile page
 // (#profileProgress, rendered from renderProfile via renderProgress, same builders,
 // same Apex gate); the standalone #progress page + its Menu button are removed.
@@ -476,12 +480,30 @@ if (achievements.earned && typeof achievements.earned === "object") {
 function saveAchievements() { localStorage.setItem("reptilift_achievements", JSON.stringify(achievements)); }
 
 // ===== calorie tracker state (PREMIUM feature) =====
-// reptilift_calories: { goal: Number, days: { "YYYY-MM-DD": [{ name, kcal }] } }.
-// In SYNC_KEYS so it travels with the cloud save. Normalized with PLAIN guards only
-// here (load-order safe — todayStr()/render run later from functions/init).
-let calories = safeParse("reptilift_calories", { goal: 2000, days: {} });
-if (typeof calories.goal !== "number" || calories.goal < 0) calories.goal = 2000;
-if (!calories.days || typeof calories.days !== "object") calories.days = {};
+// reptilift_calories: { goal: { kcal, p, c, f }, days: { "YYYY-MM-DD":
+//   [{ name, kcal, p, c, f, photo? }] } }. In SYNC_KEYS so it travels with the cloud
+// save. Normalized with PLAIN guards only here (load-order safe — todayStr()/render
+// run later). MIGRATION: `goal` used to be a plain kcal Number; if it still is one (or
+// missing), promote it to { kcal, p:0, c:0, f:0 }. Old entries lack p/c/f — treated as
+// 0 at read time, so they stay valid without rewriting them.
+let calories = safeParse("reptilift_calories", { goal: { kcal: 2000, p: 0, c: 0, f: 0 }, days: {} });
+(function migrateCalories() {
+  const g = calories.goal;
+  if (typeof g === "number") {
+    calories.goal = { kcal: g >= 0 ? g : 2000, p: 0, c: 0, f: 0 };
+  } else if (!g || typeof g !== "object") {
+    calories.goal = { kcal: 2000, p: 0, c: 0, f: 0 };
+  } else {
+    // object already — sanitize each field to a non-negative number.
+    calories.goal = {
+      kcal: Math.max(0, Number(g.kcal) || 0),
+      p: Math.max(0, Number(g.p) || 0),
+      c: Math.max(0, Number(g.c) || 0),
+      f: Math.max(0, Number(g.f) || 0),
+    };
+  }
+  if (!calories.days || typeof calories.days !== "object") calories.days = {};
+})();
 function saveCalories() { localStorage.setItem("reptilift_calories", JSON.stringify(calories)); }
 
 function saveEconomy() {
@@ -839,170 +861,178 @@ function premiumChanged() {
 // FOOD_DB: ~150 common foods. kcal is per the listed `serving`. Plain const array
 // (load-order safe — only read inside renderCalories handlers). Values are
 // reasonable rounded approximations, not lab-precise.
+// Each food carries p (protein g), c (carbs g), f (fat g) for the stated serving,
+// alongside kcal — reasonable rounded approximations (not lab-precise). Picking a food
+// fills kcal + macros; the quantity multiplier scales all four.
 const FOOD_DB = [
   // --- Proteins ---
-  { name: "Chicken breast", serving: "100g", kcal: 165 },
-  { name: "Chicken thigh", serving: "100g", kcal: 209 },
-  { name: "Turkey breast", serving: "100g", kcal: 135 },
-  { name: "Ground beef (80/20)", serving: "100g", kcal: 254 },
-  { name: "Lean steak", serving: "100g", kcal: 217 },
-  { name: "Pork chop", serving: "100g", kcal: 231 },
-  { name: "Bacon", serving: "1 slice", kcal: 43 },
-  { name: "Salmon", serving: "100g", kcal: 208 },
-  { name: "Tuna (canned in water)", serving: "100g", kcal: 116 },
-  { name: "Cod", serving: "100g", kcal: 82 },
-  { name: "Shrimp", serving: "100g", kcal: 99 },
-  { name: "Egg", serving: "1 egg", kcal: 72 },
-  { name: "Egg white", serving: "1 white", kcal: 17 },
-  { name: "Greek yogurt (plain)", serving: "100g", kcal: 59 },
-  { name: "Cottage cheese", serving: "100g", kcal: 98 },
-  { name: "Whey protein", serving: "1 scoop", kcal: 120 },
-  { name: "Casein protein", serving: "1 scoop", kcal: 120 },
-  { name: "Tofu", serving: "100g", kcal: 76 },
-  { name: "Tempeh", serving: "100g", kcal: 192 },
-  { name: "Edamame", serving: "1 cup", kcal: 188 },
-  { name: "Lentils (cooked)", serving: "1 cup", kcal: 230 },
-  { name: "Black beans (cooked)", serving: "1 cup", kcal: 227 },
-  { name: "Chickpeas (cooked)", serving: "1 cup", kcal: 269 },
-  { name: "Ham (deli)", serving: "1 slice", kcal: 30 },
-  { name: "Beef jerky", serving: "1 oz", kcal: 116 },
-  { name: "Protein bar", serving: "1 bar", kcal: 210 },
+  { name: "Chicken breast", serving: "100g", kcal: 165, p: 31, c: 0, f: 4 },
+  { name: "Chicken thigh", serving: "100g", kcal: 209, p: 26, c: 0, f: 11 },
+  { name: "Turkey breast", serving: "100g", kcal: 135, p: 30, c: 0, f: 1 },
+  { name: "Ground beef (80/20)", serving: "100g", kcal: 254, p: 26, c: 0, f: 17 },
+  { name: "Lean steak", serving: "100g", kcal: 217, p: 26, c: 0, f: 12 },
+  { name: "Pork chop", serving: "100g", kcal: 231, p: 26, c: 0, f: 14 },
+  { name: "Bacon", serving: "1 slice", kcal: 43, p: 3, c: 0, f: 3 },
+  { name: "Salmon", serving: "100g", kcal: 208, p: 20, c: 0, f: 13 },
+  { name: "Tuna (canned in water)", serving: "100g", kcal: 116, p: 26, c: 0, f: 1 },
+  { name: "Cod", serving: "100g", kcal: 82, p: 18, c: 0, f: 1 },
+  { name: "Shrimp", serving: "100g", kcal: 99, p: 24, c: 0, f: 0 },
+  { name: "Egg", serving: "1 egg", kcal: 72, p: 6, c: 0, f: 5 },
+  { name: "Egg white", serving: "1 white", kcal: 17, p: 4, c: 0, f: 0 },
+  { name: "Greek yogurt (plain)", serving: "100g", kcal: 59, p: 10, c: 4, f: 0 },
+  { name: "Cottage cheese", serving: "100g", kcal: 98, p: 11, c: 3, f: 4 },
+  { name: "Whey protein", serving: "1 scoop", kcal: 120, p: 24, c: 3, f: 2 },
+  { name: "Casein protein", serving: "1 scoop", kcal: 120, p: 24, c: 3, f: 1 },
+  { name: "Tofu", serving: "100g", kcal: 76, p: 8, c: 2, f: 5 },
+  { name: "Tempeh", serving: "100g", kcal: 192, p: 20, c: 8, f: 11 },
+  { name: "Edamame", serving: "1 cup", kcal: 188, p: 18, c: 14, f: 8 },
+  { name: "Lentils (cooked)", serving: "1 cup", kcal: 230, p: 18, c: 40, f: 1 },
+  { name: "Black beans (cooked)", serving: "1 cup", kcal: 227, p: 15, c: 41, f: 1 },
+  { name: "Chickpeas (cooked)", serving: "1 cup", kcal: 269, p: 15, c: 45, f: 4 },
+  { name: "Ham (deli)", serving: "1 slice", kcal: 30, p: 5, c: 1, f: 1 },
+  { name: "Beef jerky", serving: "1 oz", kcal: 116, p: 9, c: 7, f: 7 },
+  { name: "Protein bar", serving: "1 bar", kcal: 210, p: 20, c: 22, f: 7 },
   // --- Carbs / grains ---
-  { name: "White rice (cooked)", serving: "1 cup", kcal: 205 },
-  { name: "Brown rice (cooked)", serving: "1 cup", kcal: 216 },
-  { name: "Oats (dry)", serving: "1/2 cup", kcal: 150 },
-  { name: "Quinoa (cooked)", serving: "1 cup", kcal: 222 },
-  { name: "Pasta (cooked)", serving: "1 cup", kcal: 221 },
-  { name: "White bread", serving: "1 slice", kcal: 79 },
-  { name: "Whole wheat bread", serving: "1 slice", kcal: 81 },
-  { name: "Bagel", serving: "1 bagel", kcal: 245 },
-  { name: "Tortilla (flour)", serving: "1 tortilla", kcal: 140 },
-  { name: "Pita bread", serving: "1 pita", kcal: 165 },
-  { name: "Potato (baked)", serving: "1 medium", kcal: 161 },
-  { name: "Sweet potato", serving: "1 medium", kcal: 112 },
-  { name: "French fries", serving: "medium", kcal: 365 },
-  { name: "Cereal (corn flakes)", serving: "1 cup", kcal: 100 },
-  { name: "Granola", serving: "1/2 cup", kcal: 230 },
-  { name: "Pancake", serving: "1 pancake", kcal: 90 },
-  { name: "Waffle", serving: "1 waffle", kcal: 100 },
-  { name: "Couscous (cooked)", serving: "1 cup", kcal: 176 },
-  { name: "Corn", serving: "1 cup", kcal: 132 },
-  { name: "Crackers", serving: "5 crackers", kcal: 80 },
+  { name: "White rice (cooked)", serving: "1 cup", kcal: 205, p: 4, c: 45, f: 0 },
+  { name: "Brown rice (cooked)", serving: "1 cup", kcal: 216, p: 5, c: 45, f: 2 },
+  { name: "Oats (dry)", serving: "1/2 cup", kcal: 150, p: 5, c: 27, f: 3 },
+  { name: "Quinoa (cooked)", serving: "1 cup", kcal: 222, p: 8, c: 39, f: 4 },
+  { name: "Pasta (cooked)", serving: "1 cup", kcal: 221, p: 8, c: 43, f: 1 },
+  { name: "White bread", serving: "1 slice", kcal: 79, p: 3, c: 15, f: 1 },
+  { name: "Whole wheat bread", serving: "1 slice", kcal: 81, p: 4, c: 14, f: 1 },
+  { name: "Bagel", serving: "1 bagel", kcal: 245, p: 10, c: 48, f: 2 },
+  { name: "Tortilla (flour)", serving: "1 tortilla", kcal: 140, p: 4, c: 24, f: 3 },
+  { name: "Pita bread", serving: "1 pita", kcal: 165, p: 5, c: 33, f: 1 },
+  { name: "Potato (baked)", serving: "1 medium", kcal: 161, p: 4, c: 37, f: 0 },
+  { name: "Sweet potato", serving: "1 medium", kcal: 112, p: 2, c: 26, f: 0 },
+  { name: "French fries", serving: "medium", kcal: 365, p: 4, c: 48, f: 17 },
+  { name: "Cereal (corn flakes)", serving: "1 cup", kcal: 100, p: 2, c: 24, f: 0 },
+  { name: "Granola", serving: "1/2 cup", kcal: 230, p: 5, c: 38, f: 7 },
+  { name: "Pancake", serving: "1 pancake", kcal: 90, p: 2, c: 15, f: 2 },
+  { name: "Waffle", serving: "1 waffle", kcal: 100, p: 2, c: 13, f: 4 },
+  { name: "Couscous (cooked)", serving: "1 cup", kcal: 176, p: 6, c: 36, f: 0 },
+  { name: "Corn", serving: "1 cup", kcal: 132, p: 5, c: 29, f: 2 },
+  { name: "Crackers", serving: "5 crackers", kcal: 80, p: 1, c: 11, f: 3 },
   // --- Fruits ---
-  { name: "Banana", serving: "1 medium", kcal: 105 },
-  { name: "Apple", serving: "1 medium", kcal: 95 },
-  { name: "Orange", serving: "1 medium", kcal: 62 },
-  { name: "Strawberries", serving: "1 cup", kcal: 49 },
-  { name: "Blueberries", serving: "1 cup", kcal: 84 },
-  { name: "Grapes", serving: "1 cup", kcal: 104 },
-  { name: "Watermelon", serving: "1 cup", kcal: 46 },
-  { name: "Pineapple", serving: "1 cup", kcal: 82 },
-  { name: "Mango", serving: "1 cup", kcal: 99 },
-  { name: "Pear", serving: "1 medium", kcal: 101 },
-  { name: "Peach", serving: "1 medium", kcal: 59 },
-  { name: "Avocado", serving: "1 medium", kcal: 240 },
-  { name: "Raspberries", serving: "1 cup", kcal: 64 },
+  { name: "Banana", serving: "1 medium", kcal: 105, p: 1, c: 27, f: 0 },
+  { name: "Apple", serving: "1 medium", kcal: 95, p: 0, c: 25, f: 0 },
+  { name: "Orange", serving: "1 medium", kcal: 62, p: 1, c: 15, f: 0 },
+  { name: "Strawberries", serving: "1 cup", kcal: 49, p: 1, c: 12, f: 0 },
+  { name: "Blueberries", serving: "1 cup", kcal: 84, p: 1, c: 21, f: 0 },
+  { name: "Grapes", serving: "1 cup", kcal: 104, p: 1, c: 27, f: 0 },
+  { name: "Watermelon", serving: "1 cup", kcal: 46, p: 1, c: 12, f: 0 },
+  { name: "Pineapple", serving: "1 cup", kcal: 82, p: 1, c: 22, f: 0 },
+  { name: "Mango", serving: "1 cup", kcal: 99, p: 1, c: 25, f: 1 },
+  { name: "Pear", serving: "1 medium", kcal: 101, p: 1, c: 27, f: 0 },
+  { name: "Peach", serving: "1 medium", kcal: 59, p: 1, c: 14, f: 0 },
+  { name: "Avocado", serving: "1 medium", kcal: 240, p: 3, c: 13, f: 22 },
+  { name: "Raspberries", serving: "1 cup", kcal: 64, p: 1, c: 15, f: 1 },
   // --- Vegetables ---
-  { name: "Broccoli", serving: "1 cup", kcal: 31 },
-  { name: "Spinach (raw)", serving: "1 cup", kcal: 7 },
-  { name: "Carrot", serving: "1 medium", kcal: 25 },
-  { name: "Bell pepper", serving: "1 medium", kcal: 31 },
-  { name: "Cucumber", serving: "1 cup", kcal: 16 },
-  { name: "Tomato", serving: "1 medium", kcal: 22 },
-  { name: "Green beans", serving: "1 cup", kcal: 31 },
-  { name: "Asparagus", serving: "1 cup", kcal: 27 },
-  { name: "Mushrooms", serving: "1 cup", kcal: 15 },
-  { name: "Cauliflower", serving: "1 cup", kcal: 27 },
-  { name: "Onion", serving: "1 medium", kcal: 44 },
-  { name: "Kale", serving: "1 cup", kcal: 33 },
-  { name: "Salad (mixed greens)", serving: "2 cups", kcal: 15 },
+  { name: "Broccoli", serving: "1 cup", kcal: 31, p: 3, c: 6, f: 0 },
+  { name: "Spinach (raw)", serving: "1 cup", kcal: 7, p: 1, c: 1, f: 0 },
+  { name: "Carrot", serving: "1 medium", kcal: 25, p: 1, c: 6, f: 0 },
+  { name: "Bell pepper", serving: "1 medium", kcal: 31, p: 1, c: 7, f: 0 },
+  { name: "Cucumber", serving: "1 cup", kcal: 16, p: 1, c: 4, f: 0 },
+  { name: "Tomato", serving: "1 medium", kcal: 22, p: 1, c: 5, f: 0 },
+  { name: "Green beans", serving: "1 cup", kcal: 31, p: 2, c: 7, f: 0 },
+  { name: "Asparagus", serving: "1 cup", kcal: 27, p: 3, c: 5, f: 0 },
+  { name: "Mushrooms", serving: "1 cup", kcal: 15, p: 2, c: 2, f: 0 },
+  { name: "Cauliflower", serving: "1 cup", kcal: 27, p: 2, c: 5, f: 0 },
+  { name: "Onion", serving: "1 medium", kcal: 44, p: 1, c: 10, f: 0 },
+  { name: "Kale", serving: "1 cup", kcal: 33, p: 3, c: 6, f: 1 },
+  { name: "Salad (mixed greens)", serving: "2 cups", kcal: 15, p: 1, c: 3, f: 0 },
   // --- Fats / nuts / oils ---
-  { name: "Almonds", serving: "1 oz", kcal: 164 },
-  { name: "Walnuts", serving: "1 oz", kcal: 185 },
-  { name: "Cashews", serving: "1 oz", kcal: 157 },
-  { name: "Peanuts", serving: "1 oz", kcal: 161 },
-  { name: "Peanut butter", serving: "1 tbsp", kcal: 94 },
-  { name: "Almond butter", serving: "1 tbsp", kcal: 98 },
-  { name: "Olive oil", serving: "1 tbsp", kcal: 119 },
-  { name: "Butter", serving: "1 tbsp", kcal: 102 },
-  { name: "Coconut oil", serving: "1 tbsp", kcal: 117 },
-  { name: "Chia seeds", serving: "1 tbsp", kcal: 58 },
-  { name: "Flax seeds", serving: "1 tbsp", kcal: 55 },
-  { name: "Sunflower seeds", serving: "1 oz", kcal: 165 },
-  { name: "Pistachios", serving: "1 oz", kcal: 159 },
+  { name: "Almonds", serving: "1 oz", kcal: 164, p: 6, c: 6, f: 14 },
+  { name: "Walnuts", serving: "1 oz", kcal: 185, p: 4, c: 4, f: 18 },
+  { name: "Cashews", serving: "1 oz", kcal: 157, p: 5, c: 9, f: 12 },
+  { name: "Peanuts", serving: "1 oz", kcal: 161, p: 7, c: 5, f: 14 },
+  { name: "Peanut butter", serving: "1 tbsp", kcal: 94, p: 4, c: 3, f: 8 },
+  { name: "Almond butter", serving: "1 tbsp", kcal: 98, p: 3, c: 3, f: 9 },
+  { name: "Olive oil", serving: "1 tbsp", kcal: 119, p: 0, c: 0, f: 14 },
+  { name: "Butter", serving: "1 tbsp", kcal: 102, p: 0, c: 0, f: 12 },
+  { name: "Coconut oil", serving: "1 tbsp", kcal: 117, p: 0, c: 0, f: 14 },
+  { name: "Chia seeds", serving: "1 tbsp", kcal: 58, p: 2, c: 5, f: 4 },
+  { name: "Flax seeds", serving: "1 tbsp", kcal: 55, p: 2, c: 3, f: 4 },
+  { name: "Sunflower seeds", serving: "1 oz", kcal: 165, p: 6, c: 6, f: 14 },
+  { name: "Pistachios", serving: "1 oz", kcal: 159, p: 6, c: 8, f: 13 },
   // --- Dairy / drinks ---
-  { name: "Whole milk", serving: "1 cup", kcal: 149 },
-  { name: "Skim milk", serving: "1 cup", kcal: 83 },
-  { name: "Almond milk (unsw.)", serving: "1 cup", kcal: 30 },
-  { name: "Oat milk", serving: "1 cup", kcal: 120 },
-  { name: "Cheddar cheese", serving: "1 oz", kcal: 113 },
-  { name: "Mozzarella", serving: "1 oz", kcal: 85 },
-  { name: "Parmesan", serving: "1 tbsp", kcal: 22 },
-  { name: "Cream cheese", serving: "1 tbsp", kcal: 51 },
-  { name: "Orange juice", serving: "1 cup", kcal: 112 },
-  { name: "Apple juice", serving: "1 cup", kcal: 114 },
-  { name: "Cola", serving: "12 oz can", kcal: 140 },
-  { name: "Diet cola", serving: "12 oz can", kcal: 0 },
-  { name: "Beer", serving: "12 oz", kcal: 153 },
-  { name: "Wine (red)", serving: "5 oz", kcal: 125 },
-  { name: "Coffee (black)", serving: "1 cup", kcal: 2 },
-  { name: "Latte", serving: "12 oz", kcal: 190 },
-  { name: "Energy drink", serving: "1 can", kcal: 110 },
-  { name: "Sports drink", serving: "20 oz", kcal: 130 },
-  { name: "Coconut water", serving: "1 cup", kcal: 46 },
-  { name: "Smoothie", serving: "16 oz", kcal: 250 },
+  { name: "Whole milk", serving: "1 cup", kcal: 149, p: 8, c: 12, f: 8 },
+  { name: "Skim milk", serving: "1 cup", kcal: 83, p: 8, c: 12, f: 0 },
+  { name: "Almond milk (unsw.)", serving: "1 cup", kcal: 30, p: 1, c: 1, f: 3 },
+  { name: "Oat milk", serving: "1 cup", kcal: 120, p: 3, c: 16, f: 5 },
+  { name: "Cheddar cheese", serving: "1 oz", kcal: 113, p: 7, c: 0, f: 9 },
+  { name: "Mozzarella", serving: "1 oz", kcal: 85, p: 6, c: 1, f: 6 },
+  { name: "Parmesan", serving: "1 tbsp", kcal: 22, p: 2, c: 0, f: 1 },
+  { name: "Cream cheese", serving: "1 tbsp", kcal: 51, p: 1, c: 1, f: 5 },
+  { name: "Orange juice", serving: "1 cup", kcal: 112, p: 2, c: 26, f: 0 },
+  { name: "Apple juice", serving: "1 cup", kcal: 114, p: 0, c: 28, f: 0 },
+  { name: "Cola", serving: "12 oz can", kcal: 140, p: 0, c: 39, f: 0 },
+  { name: "Diet cola", serving: "12 oz can", kcal: 0, p: 0, c: 0, f: 0 },
+  { name: "Beer", serving: "12 oz", kcal: 153, p: 2, c: 13, f: 0 },
+  { name: "Wine (red)", serving: "5 oz", kcal: 125, p: 0, c: 4, f: 0 },
+  { name: "Coffee (black)", serving: "1 cup", kcal: 2, p: 0, c: 0, f: 0 },
+  { name: "Latte", serving: "12 oz", kcal: 190, p: 10, c: 18, f: 9 },
+  { name: "Energy drink", serving: "1 can", kcal: 110, p: 0, c: 28, f: 0 },
+  { name: "Sports drink", serving: "20 oz", kcal: 130, p: 0, c: 34, f: 0 },
+  { name: "Coconut water", serving: "1 cup", kcal: 46, p: 2, c: 9, f: 0 },
+  { name: "Smoothie", serving: "16 oz", kcal: 250, p: 6, c: 52, f: 3 },
   // --- Snacks / sweets ---
-  { name: "Potato chips", serving: "1 oz", kcal: 152 },
-  { name: "Tortilla chips", serving: "1 oz", kcal: 138 },
-  { name: "Popcorn (air-popped)", serving: "1 cup", kcal: 31 },
-  { name: "Pretzels", serving: "1 oz", kcal: 108 },
-  { name: "Dark chocolate", serving: "1 oz", kcal: 155 },
-  { name: "Milk chocolate", serving: "1 oz", kcal: 152 },
-  { name: "Cookie", serving: "1 cookie", kcal: 78 },
-  { name: "Brownie", serving: "1 piece", kcal: 132 },
-  { name: "Ice cream", serving: "1/2 cup", kcal: 137 },
-  { name: "Donut", serving: "1 donut", kcal: 253 },
-  { name: "Muffin", serving: "1 muffin", kcal: 265 },
-  { name: "Granola bar", serving: "1 bar", kcal: 120 },
-  { name: "Rice cake", serving: "1 cake", kcal: 35 },
-  { name: "Hummus", serving: "2 tbsp", kcal: 70 },
-  { name: "Trail mix", serving: "1/4 cup", kcal: 175 },
+  { name: "Potato chips", serving: "1 oz", kcal: 152, p: 2, c: 15, f: 10 },
+  { name: "Tortilla chips", serving: "1 oz", kcal: 138, p: 2, c: 18, f: 7 },
+  { name: "Popcorn (air-popped)", serving: "1 cup", kcal: 31, p: 1, c: 6, f: 0 },
+  { name: "Pretzels", serving: "1 oz", kcal: 108, p: 3, c: 23, f: 1 },
+  { name: "Dark chocolate", serving: "1 oz", kcal: 155, p: 2, c: 13, f: 11 },
+  { name: "Milk chocolate", serving: "1 oz", kcal: 152, p: 2, c: 17, f: 9 },
+  { name: "Cookie", serving: "1 cookie", kcal: 78, p: 1, c: 10, f: 4 },
+  { name: "Brownie", serving: "1 piece", kcal: 132, p: 2, c: 18, f: 6 },
+  { name: "Ice cream", serving: "1/2 cup", kcal: 137, p: 2, c: 16, f: 7 },
+  { name: "Donut", serving: "1 donut", kcal: 253, p: 4, c: 31, f: 14 },
+  { name: "Muffin", serving: "1 muffin", kcal: 265, p: 4, c: 38, f: 11 },
+  { name: "Granola bar", serving: "1 bar", kcal: 120, p: 2, c: 19, f: 4 },
+  { name: "Rice cake", serving: "1 cake", kcal: 35, p: 1, c: 7, f: 0 },
+  { name: "Hummus", serving: "2 tbsp", kcal: 70, p: 2, c: 6, f: 5 },
+  { name: "Trail mix", serving: "1/4 cup", kcal: 175, p: 5, c: 16, f: 11 },
   // --- Fast food / restaurant ---
-  { name: "Cheeseburger", serving: "1 burger", kcal: 300 },
-  { name: "Big burger (1/4 lb)", serving: "1 burger", kcal: 540 },
-  { name: "Chicken nuggets", serving: "6 pieces", kcal: 270 },
-  { name: "Pizza slice (cheese)", serving: "1 slice", kcal: 285 },
-  { name: "Pizza slice (pepperoni)", serving: "1 slice", kcal: 313 },
-  { name: "Hot dog", serving: "1 hot dog", kcal: 290 },
-  { name: "Burrito", serving: "1 burrito", kcal: 580 },
-  { name: "Taco", serving: "1 taco", kcal: 170 },
-  { name: "Sushi roll", serving: "6 pieces", kcal: 255 },
-  { name: "Chicken sandwich", serving: "1 sandwich", kcal: 440 },
-  { name: "Caesar salad", serving: "1 bowl", kcal: 360 },
-  { name: "Fried chicken", serving: "1 piece", kcal: 320 },
-  { name: "Ramen (instant)", serving: "1 pack", kcal: 380 },
-  { name: "Mac & cheese", serving: "1 cup", kcal: 310 },
+  { name: "Cheeseburger", serving: "1 burger", kcal: 300, p: 15, c: 33, f: 12 },
+  { name: "Big burger (1/4 lb)", serving: "1 burger", kcal: 540, p: 25, c: 40, f: 28 },
+  { name: "Chicken nuggets", serving: "6 pieces", kcal: 270, p: 14, c: 16, f: 17 },
+  { name: "Pizza slice (cheese)", serving: "1 slice", kcal: 285, p: 12, c: 36, f: 10 },
+  { name: "Pizza slice (pepperoni)", serving: "1 slice", kcal: 313, p: 13, c: 36, f: 13 },
+  { name: "Hot dog", serving: "1 hot dog", kcal: 290, p: 10, c: 23, f: 17 },
+  { name: "Burrito", serving: "1 burrito", kcal: 580, p: 24, c: 70, f: 22 },
+  { name: "Taco", serving: "1 taco", kcal: 170, p: 8, c: 13, f: 9 },
+  { name: "Sushi roll", serving: "6 pieces", kcal: 255, p: 9, c: 38, f: 7 },
+  { name: "Chicken sandwich", serving: "1 sandwich", kcal: 440, p: 26, c: 40, f: 19 },
+  { name: "Caesar salad", serving: "1 bowl", kcal: 360, p: 10, c: 12, f: 30 },
+  { name: "Fried chicken", serving: "1 piece", kcal: 320, p: 22, c: 11, f: 21 },
+  { name: "Ramen (instant)", serving: "1 pack", kcal: 380, p: 8, c: 52, f: 14 },
+  { name: "Mac & cheese", serving: "1 cup", kcal: 310, p: 11, c: 40, f: 12 },
   // --- Condiments / extras ---
-  { name: "Ketchup", serving: "1 tbsp", kcal: 17 },
-  { name: "Mayonnaise", serving: "1 tbsp", kcal: 94 },
-  { name: "Mustard", serving: "1 tbsp", kcal: 9 },
-  { name: "Ranch dressing", serving: "2 tbsp", kcal: 129 },
-  { name: "Soy sauce", serving: "1 tbsp", kcal: 8 },
-  { name: "Honey", serving: "1 tbsp", kcal: 64 },
-  { name: "Maple syrup", serving: "1 tbsp", kcal: 52 },
-  { name: "Sugar", serving: "1 tsp", kcal: 16 },
-  { name: "Jam", serving: "1 tbsp", kcal: 56 },
+  { name: "Ketchup", serving: "1 tbsp", kcal: 17, p: 0, c: 4, f: 0 },
+  { name: "Mayonnaise", serving: "1 tbsp", kcal: 94, p: 0, c: 0, f: 10 },
+  { name: "Mustard", serving: "1 tbsp", kcal: 9, p: 1, c: 1, f: 0 },
+  { name: "Ranch dressing", serving: "2 tbsp", kcal: 129, p: 1, c: 2, f: 13 },
+  { name: "Soy sauce", serving: "1 tbsp", kcal: 8, p: 1, c: 1, f: 0 },
+  { name: "Honey", serving: "1 tbsp", kcal: 64, p: 0, c: 17, f: 0 },
+  { name: "Maple syrup", serving: "1 tbsp", kcal: 52, p: 0, c: 13, f: 0 },
+  { name: "Sugar", serving: "1 tsp", kcal: 16, p: 0, c: 4, f: 0 },
+  { name: "Jam", serving: "1 tbsp", kcal: 56, p: 0, c: 14, f: 0 },
 ];
 function calToday() {
   const d = todayStr();
   if (!Array.isArray(calories.days[d])) calories.days[d] = [];
   return calories.days[d];
 }
-function calAdd(name, kcal, photo) {
+// read a macro field off an entry, defaulting old {name,kcal} entries (no p/c/f) to 0.
+const entryMacro = (e, k) => Math.max(0, Math.round(Number(e && e[k]) || 0));
+function calAdd(name, kcal, photo, macros) {
   name = String(name || "").trim().slice(0, 40) || "Entry";
   kcal = Math.max(0, Math.round(Number(kcal) || 0));
-  if (!kcal && !photo) return;
-  const entry = { name, kcal };
+  const p = Math.max(0, Math.round(Number(macros && macros.p) || 0));
+  const c = Math.max(0, Math.round(Number(macros && macros.c) || 0));
+  const f = Math.max(0, Math.round(Number(macros && macros.f) || 0));
+  if (!kcal && !p && !c && !f && !photo) return;
+  const entry = { name, kcal, p, c, f };
   if (photo) entry.photo = photo;          // optional data URL; old {name,kcal} stays valid
   calToday().push(entry);
   saveCalories(); renderCalories();
@@ -1011,9 +1041,11 @@ function calDelete(i) {
   const t = calToday();
   if (i >= 0 && i < t.length) { t.splice(i, 1); saveCalories(); renderCalories(); }
 }
-function calSetGoal(v) {
+// set one goal field (kcal | p | c | f). goal is always an object after migration.
+function calSetGoal(field, v) {
   const n = Math.max(0, Math.round(Number(v) || 0));
-  calories.goal = n; saveCalories(); renderCalories();
+  if (!calories.goal || typeof calories.goal !== "object") calories.goal = { kcal: 0, p: 0, c: 0, f: 0 };
+  calories.goal[field] = n; saveCalories(); renderCalories();
 }
 function renderCalories() {
   const box = document.getElementById("calBody");
@@ -1031,19 +1063,40 @@ function renderCalories() {
     return;
   }
   const entries = calToday();
-  const total = entries.reduce((s, e) => s + (e.kcal || 0), 0);
-  const goal = calories.goal || 0;
-  const pct = goal > 0 ? Math.min(100, Math.round((total / goal) * 100)) : 0;
-  const over = goal > 0 && total > goal;
-  const remaining = goal - total;
+  const goal = calories.goal && typeof calories.goal === "object" ? calories.goal : { kcal: 0, p: 0, c: 0, f: 0 };
+  // sum kcal + each macro across today's entries (old entries contribute 0 macros).
+  const total = entries.reduce((s, e) => s + entryMacro(e, "kcal"), 0);
+  const tP = entries.reduce((s, e) => s + entryMacro(e, "p"), 0);
+  const tC = entries.reduce((s, e) => s + entryMacro(e, "c"), 0);
+  const tF = entries.reduce((s, e) => s + entryMacro(e, "f"), 0);
+  const gKcal = Math.max(0, Number(goal.kcal) || 0);
+  const pct = gKcal > 0 ? Math.min(100, Math.round((total / gKcal) * 100)) : 0;
+  const over = gKcal > 0 && total > gKcal;
+  const remaining = gKcal - total;
+  // a compact P/C/F macro bar: label, total (vs goal if set), progress fill.
+  const macroBar = (label, color, tot, gl) => {
+    const p2 = gl > 0 ? Math.min(100, Math.round((tot / gl) * 100)) : 0;
+    const ov = gl > 0 && tot > gl;
+    return `<div class="cal-macro" style="--c:${ov ? "#e0563b" : color}">
+        <div class="cal-macro-top"><span class="cal-macro-lbl">${label}</span>
+          <span class="cal-macro-val">${tot}g${gl > 0 ? ` <em>/ ${gl}g</em>` : ""}</span></div>
+        <div class="progress"><i style="width:${p2}%"></i></div></div>`;
+  };
   const listHtml = entries.length
-    ? entries.map((e, i) => `
+    ? entries.map((e, i) => {
+        const ep = entryMacro(e, "p"), ec = entryMacro(e, "c"), ef = entryMacro(e, "f");
+        const hasMacros = ep || ec || ef;
+        return `
         <div class="cal-entry">
           ${e.photo ? `<img class="cal-e-thumb" data-photo="${i}" src="${e.photo}" alt="meal" />` : ""}
-          <span class="cal-e-name">${escapeHtml(e.name)}</span>
-          <span class="cal-e-kcal">${(e.kcal || 0).toLocaleString()}</span>
+          <div class="cal-e-main">
+            <span class="cal-e-name">${escapeHtml(e.name)}</span>
+            <span class="cal-e-macros">${hasMacros ? `P ${ep} · C ${ec} · F ${ef}` : "—"}</span>
+          </div>
+          <span class="cal-e-kcal">${entryMacro(e, "kcal").toLocaleString()}</span>
           <button class="cal-e-del" data-del="${i}" type="button" aria-label="Delete">✕</button>
-        </div>`).join("")
+        </div>`;
+      }).join("")
     : `<p class="empty">Nothing logged today. Add a meal to feed the beast. 🦎</p>`;
   // recent days strip (last few days, excluding today, that have entries)
   const recentDays = Object.keys(calories.days)
@@ -1051,20 +1104,34 @@ function renderCalories() {
     .sort().reverse().slice(0, 5);
   const recentHtml = recentDays.length
     ? `<h3 class="sub">Recent days</h3><div class="cal-recent">` + recentDays.map((d) => {
-        const tot = calories.days[d].reduce((s, e) => s + (e.kcal || 0), 0);
+        const tot = calories.days[d].reduce((s, e) => s + entryMacro(e, "kcal"), 0);
         return `<div class="cal-day"><b>${tot.toLocaleString()}</b><span>${prettyDate(d)}</span></div>`;
       }).join("") + `</div>`
     : "";
   box.innerHTML = `
-    <div class="cal-goalrow">
-      <label class="pe-label">Daily goal (kcal)
-        <input type="number" id="calGoal" min="0" inputmode="numeric" value="${goal || ""}" placeholder="2000" />
+    <div class="cal-goalrow cal-goalgrid">
+      <label class="pe-label">Goal kcal
+        <input type="number" id="calGoal" min="0" inputmode="numeric" value="${gKcal || ""}" placeholder="2000" />
+      </label>
+      <label class="pe-label">Protein g
+        <input type="number" id="calGoalP" min="0" inputmode="numeric" value="${goal.p || ""}" placeholder="0" />
+      </label>
+      <label class="pe-label">Carbs g
+        <input type="number" id="calGoalC" min="0" inputmode="numeric" value="${goal.c || ""}" placeholder="0" />
+      </label>
+      <label class="pe-label">Fat g
+        <input type="number" id="calGoalF" min="0" inputmode="numeric" value="${goal.f || ""}" placeholder="0" />
       </label>
     </div>
     <div class="cal-summary" style="--c:${over ? "#e0563b" : "#46b07a"}">
-      <div class="cal-total"><b>${total.toLocaleString()}</b><span>of ${goal ? goal.toLocaleString() : "—"} kcal today</span></div>
+      <div class="cal-total"><b>${total.toLocaleString()}</b><span>of ${gKcal ? gKcal.toLocaleString() : "—"} kcal today</span></div>
       <div class="progress"><i style="width:${pct}%"></i></div>
-      <div class="cal-remain">${goal ? (over ? `${Math.abs(remaining).toLocaleString()} over goal` : `${remaining.toLocaleString()} left`) : "Set a goal above"}</div>
+      <div class="cal-remain">${gKcal ? (over ? `${Math.abs(remaining).toLocaleString()} over goal` : `${remaining.toLocaleString()} left`) : "Set a goal above"}</div>
+      <div class="cal-macros-row">
+        ${macroBar("Protein", "#7c83ff", tP, Math.max(0, Number(goal.p) || 0))}
+        ${macroBar("Carbs", "#f2c14e", tC, Math.max(0, Number(goal.c) || 0))}
+        ${macroBar("Fat", "#e0563b", tF, Math.max(0, Number(goal.f) || 0))}
+      </div>
     </div>
     <h3 class="sub">Add entry</h3>
     <div class="cal-search">
@@ -1075,6 +1142,11 @@ function renderCalories() {
       <input type="text" id="calName" placeholder="Food / meal" autocomplete="off" maxlength="40" />
       <input type="number" id="calKcal" placeholder="kcal" min="0" inputmode="numeric" />
       <label class="cal-qty">×<input type="number" id="calQty" value="1" min="0.25" step="0.25" inputmode="decimal" /></label>
+    </div>
+    <div class="cal-addrow cal-macrorow">
+      <label class="cal-mfield">P<input type="number" id="calP" placeholder="0" min="0" inputmode="numeric" /></label>
+      <label class="cal-mfield">C<input type="number" id="calC" placeholder="0" min="0" inputmode="numeric" /></label>
+      <label class="cal-mfield">F<input type="number" id="calF" placeholder="0" min="0" inputmode="numeric" /></label>
     </div>
     <div class="cal-addrow2">
       <button class="cal-photo-btn" id="calPhotoBtn" type="button">📷 Photo</button>
@@ -1087,9 +1159,18 @@ function renderCalories() {
     ${recentHtml}`;
   // wiring (rebuilt each render — bind directly)
   const goalI = document.getElementById("calGoal");
-  if (goalI) goalI.addEventListener("change", () => calSetGoal(goalI.value));
+  if (goalI) goalI.addEventListener("change", () => calSetGoal("kcal", goalI.value));
+  const goalPI = document.getElementById("calGoalP");
+  if (goalPI) goalPI.addEventListener("change", () => calSetGoal("p", goalPI.value));
+  const goalCI = document.getElementById("calGoalC");
+  if (goalCI) goalCI.addEventListener("change", () => calSetGoal("c", goalCI.value));
+  const goalFI = document.getElementById("calGoalF");
+  if (goalFI) goalFI.addEventListener("change", () => calSetGoal("f", goalFI.value));
   const nameI = document.getElementById("calName");
   const kcalI = document.getElementById("calKcal");
+  const pI = document.getElementById("calP");
+  const cI = document.getElementById("calC");
+  const fI = document.getElementById("calF");
   const qtyI = document.getElementById("calQty");
   const addBtn = document.getElementById("calAddBtn");
   // pendingPhoto holds the downscaled data URL for the next Add (cleared after).
@@ -1115,10 +1196,14 @@ function renderCalories() {
   }
   const qty = () => { const n = Number(qtyI && qtyI.value); return n > 0 ? n : 1; };
   const doAdd = () => {
+    const q = qty();
     const baseK = kcalI && kcalI.value ? Number(kcalI.value) : 0;
-    const k = Math.round(baseK * qty());
-    if (!k && !pendingPhoto) return;
-    calAdd(nameI ? nameI.value : "Entry", k, pendingPhoto);
+    const k = Math.round(baseK * q);
+    const p = Math.round((pI && pI.value ? Number(pI.value) : 0) * q);
+    const c = Math.round((cI && cI.value ? Number(cI.value) : 0) * q);
+    const f = Math.round((fI && fI.value ? Number(fI.value) : 0) * q);
+    if (!k && !p && !c && !f && !pendingPhoto) return;
+    calAdd(nameI ? nameI.value : "Entry", k, pendingPhoto, { p, c, f });
     pendingPhoto = null;   // renderCalories re-runs and resets the field anyway
   };
   if (addBtn) addBtn.addEventListener("click", doAdd);
@@ -1132,25 +1217,31 @@ function renderCalories() {
   const resultsBox = document.getElementById("calResults");
   if (searchI && resultsBox) {
     let offTimer = null, offToken = 0;
-    const pick = (name, kcal) => {
+    // pick a search result: fills name + kcal + macros, resets qty to 1.
+    const pick = (name, kcal, p, c, f) => {
       if (nameI) nameI.value = name;
       if (kcalI) kcalI.value = Math.round(kcal);
+      if (pI) pI.value = Math.round(p) || "";
+      if (cI) cI.value = Math.round(c) || "";
+      if (fI) fI.value = Math.round(f) || "";
       if (qtyI) qtyI.value = "1";
       resultsBox.innerHTML = "";
       searchI.value = "";
       if (kcalI) kcalI.focus();
     };
-    const rowHtml = (name, kcal, tag) =>
-      `<button class="cal-res" type="button" data-n="${escapeHtml(name)}" data-k="${Math.round(kcal)}">` +
+    // macros are stashed on the button as data attrs so pick() can read them back.
+    const rowHtml = (name, kcal, tag, p, c, f) =>
+      `<button class="cal-res" type="button" data-n="${escapeHtml(name)}" data-k="${Math.round(kcal)}"` +
+      ` data-p="${Math.round(p) || 0}" data-c="${Math.round(c) || 0}" data-f="${Math.round(f) || 0}">` +
       `<span class="cal-res-name">${escapeHtml(name)}</span>` +
-      `<span class="cal-res-meta">${Math.round(kcal)} kcal${tag ? ` <em class="cal-res-tag">${tag}</em>` : ""}</span></button>`;
+      `<span class="cal-res-meta">${Math.round(kcal)} kcal · P${Math.round(p) || 0} C${Math.round(c) || 0} F${Math.round(f) || 0}${tag ? ` <em class="cal-res-tag">${tag}</em>` : ""}</span></button>`;
     const bindRows = () => resultsBox.querySelectorAll(".cal-res").forEach((b) =>
-      b.addEventListener("click", () => pick(b.dataset.n, +b.dataset.k)));
+      b.addEventListener("click", () => pick(b.dataset.n, +b.dataset.k, +b.dataset.p, +b.dataset.c, +b.dataset.f)));
     const renderLocal = (q) => {
       const matches = FOOD_DB
         .filter((f) => f.name.toLowerCase().indexOf(q) >= 0)
         .slice(0, 8)
-        .map((f) => rowHtml(`${f.name} (${f.serving})`, f.kcal, ""));
+        .map((f) => rowHtml(`${f.name} (${f.serving})`, f.kcal, "", f.p, f.c, f.f));
       resultsBox.innerHTML = matches.length ? matches.join("") : `<div class="cal-res-empty">No built-in match — type kcal manually below.</div>`;
       bindRows();
     };
@@ -1168,8 +1259,13 @@ function renderCalories() {
           const rows = [];
           prods.forEach((p) => {
             const nm = (p.product_name || "").trim();
-            const k = p.nutriments && Number(p.nutriments["energy-kcal_100g"]);
-            if (nm && k > 0 && rows.length < 8) rows.push(rowHtml(`${nm} (100g)`, k, "online"));
+            const n = p.nutriments || {};
+            const k = Number(n["energy-kcal_100g"]);
+            // macros per 100g — map alongside kcal; missing → 0.
+            const mp = Math.max(0, Number(n["proteins_100g"]) || 0);
+            const mc = Math.max(0, Number(n["carbohydrates_100g"]) || 0);
+            const mf = Math.max(0, Number(n["fat_100g"]) || 0);
+            if (nm && k > 0 && rows.length < 8) rows.push(rowHtml(`${nm} (100g)`, k, "online", mp, mc, mf));
           });
           if (rows.length) {
             resultsBox.insertAdjacentHTML("beforeend", `<div class="cal-res-sep">Online results</div>` + rows.join(""));
@@ -1807,7 +1903,7 @@ function showReview(r, silent) {
     }).join("") + `</div>`;
 
   // coins earned this session
-  const coinHtml = r.coins ? `<div class="rv-coins">+${r.coins.toLocaleString()} ${COIN} ${CUR} earned${r.boosted ? ` <span class="rv-boost">⚡ 2× boost</span>` : ""}</div>` : "";
+  const coinHtml = r.coins ? `<div class="rv-coins">+${r.coins.toLocaleString()} ${COIN} ${CUR} earned${r.boosted ? ` <span class="rv-boost">⚡ 2× boost</span>` : ""}${r.apex ? ` <span class="rv-boost rv-apex">👑 2× Apex</span>` : ""}</div>` : "";
   body.innerHTML = `
     <div class="rv-emoji" style="text-shadow:0 0 26px ${accent}">${tb.emoji}</div>
     <h2 class="rv-title">Session complete</h2>
@@ -2324,6 +2420,9 @@ const COSMETICS = {
       bg: ["#1a1d1f", "#0a0b0c"], accent: "#c9ced4", wordmark: "#eaf5ee" },
     { id: "themeAbyss",  name: "Abyss",   price: 450, swatch: "linear-gradient(135deg,#2eb6ff,#04203a)",
       bg: ["#06223a", "#020c16"], accent: "#39c0ff", wordmark: "#9fe3ff" },
+    // APEX-EXCLUSIVE: free to equip for Apex members; locked behind Apex otherwise.
+    { id: "themeApexGold", name: "Apex Gold", price: 0, apex: true, swatch: "linear-gradient(135deg,#ffe39a,#b8860b)",
+      bg: ["#2a2208", "#0e0b02"], accent: "#ffd766", wordmark: "#fff0c2" },
   ],
   frame: [
     { id: "frameGold",  name: "Gold Ring",   price: 200, ring: "#f2c14e", glow: "#f2c14e" },
@@ -2331,6 +2430,8 @@ const COSMETICS = {
     { id: "frameNeon",  name: "Neon Ring",   price: 300, ring: "#39c0ff", glow: "#2eb6ff" },
     { id: "frameScale", name: "Beast Scale", price: 400, ring: "#8dff52", glow: "#5fd23a" },
     { id: "framePlasma",name: "Plasma Ring", price: 500, ring: "#b288ff", glow: "#a06bff" },
+    // APEX-EXCLUSIVE crown-gold ring.
+    { id: "frameApexCrown", name: "Apex Crown", price: 0, apex: true, ring: "#ffd766", glow: "#ffb000" },
   ],
   nameColor: [
     { id: "nameGold",   name: "Gold",        price: 150, color: "#f2c14e" },
@@ -2338,6 +2439,8 @@ const COSMETICS = {
     { id: "nameToxic",  name: "Toxic",       price: 250, color: "#8dff52" },
     { id: "nameRoyal",  name: "Royal",       price: 300, gradient: ["#b288ff", "#f2c14e"] },
     { id: "nameIce",    name: "Ice",         price: 300, gradient: ["#9fe3ff", "#39c0ff"] },
+    // APEX-EXCLUSIVE royal-gold name gradient.
+    { id: "nameApex",   name: "Apex",        price: 0, apex: true, gradient: ["#fff0c2", "#ffb000"] },
   ],
   border: [
     { id: "borderGold",   name: "Gold Glow",   price: 250, color: "#f2c14e", glow: "#f2c14e" },
@@ -2362,26 +2465,41 @@ const COSMETIC_BY_ID = (() => {
   } catch (e) {}
   return m;
 })();
-// is an item owned? (guarded)
+// Apex-exclusive items are usable only by Apex members. For an apex item this returns
+// false when premium has lapsed, so a non-Apex user can never equip/keep one equipped.
+function cosmeticUsable(c) {
+  try { return !c || !c.apex || isPremium(); } catch (e) { return false; }
+}
+// is an item owned? Apex-exclusive items are implicitly "owned" (free) for Apex members
+// even without a purchase record, so they show as Equip rather than Buy. (guarded)
 function cosmeticOwned(id) {
-  try { return !!(profile.cosmetics && profile.cosmetics.owned && profile.cosmetics.owned[id]); }
-  catch (e) { return false; }
+  try {
+    const c = COSMETIC_BY_ID[id];
+    if (c && c.apex) return isPremium();           // free for Apex; not ownable otherwise
+    return !!(profile.cosmetics && profile.cosmetics.owned && profile.cosmetics.owned[id]);
+  } catch (e) { return false; }
 }
 // the equipped item object for a slot, or null. Falls back to null if the equipped id
-// is no longer owned/known (so a removed cosmetic cleanly reverts to default).
+// is no longer owned/known (so a removed cosmetic cleanly reverts to default). An
+// apex-only item is also ignored if premium has lapsed — graceful fallback to default.
 function equippedCosmetic(slot) {
   try {
     const id = profile.cosmetics && profile.cosmetics.equipped && profile.cosmetics.equipped[slot];
     if (!id || !cosmeticOwned(id)) return null;
     const it = COSMETIC_BY_ID[id];
-    return it && it.slot === slot ? it : null;
+    if (!it || it.slot !== slot) return null;
+    if (!cosmeticUsable(it)) return null;          // apex item but no longer Apex
+    return it;
   } catch (e) { return null; }
 }
 // equip (or, with id="" / unowned, unequip) a slot. Persists + re-publishes social bits.
+// Guards apex-only items: a non-Apex user can't equip one.
 function equipCosmetic(slot, id) {
   try {
     if (!profile.cosmetics.equipped || typeof profile.cosmetics.equipped !== "object") profile.cosmetics.equipped = {};
-    profile.cosmetics.equipped[slot] = (id && cosmeticOwned(id) && COSMETIC_BY_ID[id] && COSMETIC_BY_ID[id].slot === slot) ? id : "";
+    const it = id && COSMETIC_BY_ID[id];
+    const ok = it && it.slot === slot && cosmeticOwned(id) && cosmeticUsable(it);
+    profile.cosmetics.equipped[slot] = ok ? id : "";
     save();
     try { if (typeof publishPublicProfile === "function") publishPublicProfile(); } catch (e) {}
   } catch (e) {}
@@ -2440,9 +2558,13 @@ function awardWorkoutCoins(r) {
   if (r.overallChanged) coins += 50;               // +50 new overall rank
   let boosted = false;
   if (inventory.boosterArmed) { coins *= 2; boosted = true; inventory.boosterArmed = false; }
+  // APEX PERK: Apex members earn double Scales from finished workouts. Tracked
+  // separately from the consumable Coin Booster so the recap can call it out.
+  let apex = false;
+  if (isPremium()) { coins *= 2; apex = true; }
   addCoins(coins);
   saveEconomy();
-  r.coins = coins; r.boosted = boosted;
+  r.coins = coins; r.boosted = boosted; r.apex = apex;
   return coins;
 }
 
@@ -2534,20 +2656,36 @@ function renderCosmeticShop() {
     grp.className = "cos-group";
     const items = (COSMETICS[s.slot] || []).map((c) => {
       const owned = cosmeticOwned(c.id);
-      const equipped = (profile.cosmetics.equipped[s.slot] === c.id) && owned;
-      const btn = owned
-        ? (equipped ? `<span class="cos-eq">✓ Equipped</span>` : `<button class="btn ghost cos-act" data-cos-equip="${c.id}">Equip</button>`)
-        : `<button class="btn cos-act" data-cos-buy="${c.id}">${COIN} ${c.price}</button>`;
-      return `<div class="cos-item${equipped ? " on" : ""}">
+      const equipped = (profile.cosmetics.equipped[s.slot] === c.id) && owned && cosmeticUsable(c);
+      let btn, tag;
+      if (c.apex) {
+        // APEX-EXCLUSIVE: Apex members get it free (Equip, no Scales). Non-Apex sees a
+        // locked Go Apex CTA and can't buy or equip it.
+        if (isPremium()) {
+          btn = equipped ? `<span class="cos-eq">✓ Equipped</span>` : `<button class="btn ghost cos-act" data-cos-equip="${c.id}">Equip</button>`;
+          tag = `<span class="cos-apextag">👑 Apex</span>`;
+        } else {
+          btn = `<button class="btn cos-act cos-apexcta" data-gopremium type="button">👑 Go Apex</button>`;
+          tag = `<span class="cos-apextag locked">👑 Apex only</span>`;
+        }
+      } else if (owned) {
+        btn = equipped ? `<span class="cos-eq">✓ Equipped</span>` : `<button class="btn ghost cos-act" data-cos-equip="${c.id}">Equip</button>`;
+        tag = owned ? "Owned" : "Locked";
+      } else {
+        btn = `<button class="btn cos-act" data-cos-buy="${c.id}">${COIN} ${c.price}</button>`;
+        tag = "Locked";
+      }
+      return `<div class="cos-item${equipped ? " on" : ""}${c.apex ? " cos-apex" : ""}">
         ${cosmeticPreview(c, s.slot)}
         <div class="cos-info"><div class="cos-name">${c.name}</div>
-          <div class="cos-tag">${owned ? "Owned" : "Locked"}</div></div>
+          <div class="cos-tag">${tag}</div></div>
         ${btn}</div>`;
     }).join("");
     grp.innerHTML = `<div class="cos-grouptitle">${s.label}<span>${s.hint}</span></div>
       <div class="cos-items">${items}</div>`;
     box.appendChild(grp);
   });
+  try { wireGoPremium(box); } catch (e) {}   // apex-locked items: Go Apex CTA
   box.querySelectorAll("[data-cos-buy]").forEach((b) => b.addEventListener("click", () => buyCosmetic(b.dataset.cosBuy)));
   box.querySelectorAll("[data-cos-equip]").forEach((b) => b.addEventListener("click", () => {
     const c = COSMETIC_BY_ID[b.dataset.cosEquip]; if (!c) return;
@@ -2561,6 +2699,7 @@ function renderCosmeticShop() {
 // owned, auto-equip it for instant gratification, persist, re-publish social bits.
 function buyCosmetic(id) {
   const c = COSMETIC_BY_ID[id]; if (!c) return;
+  if (c.apex) return;                        // apex-exclusive: never purchasable with Scales
   if (cosmeticOwned(id)) return;
   if (wallet.balance < c.price) { alert(`Not enough ${CUR}. You need ${c.price - wallet.balance} more ${COIN}.`); return; }
   addCoins(-c.price);
@@ -2660,7 +2799,9 @@ function claimQuest(id) {
   const prog = daily ? q.prog(quests.daily) : q.prog(quests.lifetime);
   const already = daily ? quests.daily.claimed[id] : quests.claimed[id];
   if (already || prog < q.goal) return;            // guard double-claim / incomplete
-  addCoins(q.reward);
+  // APEX PERK: Apex members earn double Scales from quest claims too.
+  const reward = isPremium() ? q.reward * 2 : q.reward;
+  addCoins(reward);
   if (daily) quests.daily.claimed[id] = true; else quests.claimed[id] = true;
   quests.lifetime.claims = (quests.lifetime.claims || 0) + 1;   // total quests claimed (Quest Hunter)
   saveEconomy();
