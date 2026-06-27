@@ -1,4 +1,4 @@
-// Reptilift v3.50 — earn your beast rank per exercise from your MMR.
+// Reptilift v3.51 — earn your beast rank per exercise from your MMR.
 // v3.47 adds to the premium calorie tracker: a FOOD_DB search (built-in ~150 foods +
 // OpenFoodFacts online lookup, debounced + graceful-degrade offline) with a quantity
 // multiplier, and PHOTO logging (downscaled JPEG data URL on the optional entry.photo,
@@ -775,9 +775,9 @@ function renderPremium() {
   if (active) active.classList.toggle("hidden", !prem);
   const msg = document.getElementById("premCodeMsg");
   if (msg && !prem) msg.textContent = "";
-  // keep the Menu button label in sync (Go Premium → 👑 Premium when active).
+  // keep the Menu button label in sync (Go Apex → 👑 Premium when active).
   const goLbl = document.getElementById("goPremiumLbl");
-  if (goLbl) goLbl.textContent = prem ? "Premium" : "Go Premium";
+  if (goLbl) goLbl.textContent = prem ? "Apex" : "Go Apex";
   const goBtn = document.getElementById("goPremiumBtn");
   if (goBtn) goBtn.classList.toggle("owned", prem);
   if (premiumWired) return;
@@ -791,7 +791,7 @@ function renderPremium() {
       profile.premium = true;
       try { save(); } catch (e) {}
       if (input) input.value = "";
-      if (msg) { msg.className = "prem-codemsg ok"; msg.textContent = "Premium unlocked 🐙"; }
+      if (msg) { msg.className = "prem-codemsg ok"; msg.textContent = "Apex unlocked 🐙"; }
       try { if (soundOn) blip(); } catch (e) {}
       // re-render everywhere the gate matters so true ranks/charts/tracker appear now.
       premiumChanged();
@@ -804,7 +804,7 @@ function renderPremium() {
   if (input) input.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); tryCode(); } });
   const manage = document.getElementById("premManageBtn");
   if (manage) manage.addEventListener("click", () => {
-    if (!confirm("Turn premium OFF? (testing only — your ranks/charts/calories cap again.)")) return;
+    if (!confirm("Turn Apex OFF? (testing only — your ranks/charts/calories cap again.)")) return;
     profile.premium = false;
     try { save(); } catch (e) {}
     premiumChanged();
@@ -830,7 +830,7 @@ function premiumChanged() {
 // ===== CALORIE TRACKER (premium-only) =====
 // reptilift_calories: { goal, days: { "YYYY-MM-DD": [{ name, kcal, photo? }] } } (in
 // SYNC_KEYS). `photo` is an OPTIONAL small downscaled JPEG data URL — old {name,kcal}
-// entries stay valid. Non-premium sees a lock state with a Go Premium CTA. Premium gets:
+// entries stay valid. Non-premium sees a lock state with a Go Apex CTA. Premium gets:
 // set a goal, a FOOD_DB search (built-in + OpenFoodFacts online when on),
 // quantity multiplier, photo capture, manual entry, today's total vs goal with a
 // progress bar, delete, and a recent-days strip. All render + wiring lives here;
@@ -1017,14 +1017,14 @@ function calSetGoal(v) {
 function renderCalories() {
   const box = document.getElementById("calBody");
   if (!box) return;
-  // PREMIUM GATE: non-premium sees a lock state + Go Premium CTA.
+  // PREMIUM GATE: non-premium sees a lock state + Go Apex CTA.
   if (!isPremium()) {
     box.innerHTML = `
       <div class="lockstate">
         <div class="lock-emoji">🔒</div>
-        <div class="lock-title">Calorie tracking is a Premium feature</div>
-        <p class="lock-sub">Set a daily goal and log your intake on-brand. Unlock it with Premium.</p>
-        <button class="btn premium-sub" data-gopremium type="button">👑 Go Premium</button>
+        <div class="lock-title">Calorie tracking is an Apex feature</div>
+        <p class="lock-sub">Set a daily goal and log your intake on-brand. Unlock it with Apex.</p>
+        <button class="btn premium-sub" data-gopremium type="button">👑 Go Apex</button>
       </div>`;
     wireGoPremium(box);
     return;
@@ -1955,13 +1955,13 @@ function renderWorkout() {
     if (rb) {
       const recShown = rec ? shownMMR(rec.mmr) : null;
       const ti = tierOf(rb.id); let pct = 100, nextTxt = "🐙 Apex beast — maxed out", label = "Next rank";
-      let goPrem = false;   // when true, the panel becomes a tappable Go Premium CTA
+      let goPrem = false;   // when true, the panel becomes a tappable Go Apex CTA
       // free user at OR above the Alligator tier (real MMR ≥ 51, even below the 125
-      // ceiling) → Go Premium nudge. Without this, a free lifter mid-Alligator would
+      // ceiling) → Go Apex nudge. Without this, a free lifter mid-Alligator would
       // see the LOCKED next beast (Eagle) name + a concrete target, leaking premium.
       const realB = rec ? classify(rec.mmr) : null;
       if (rec && !isPremium() && realB && tierOf(realB.id) >= ALLIGATOR_TIER) {
-        pct = 100; label = "Rank capped"; nextTxt = "🔒 Go Premium to rank past Alligator"; goPrem = true;
+        pct = 100; label = "Rank capped"; nextTxt = "🔒 Go Apex to rank past Alligator"; goPrem = true;
       } else if (ti < BEASTS.length) {
         const nb = BEASTS[ti]; const span = nb.mmrMin - rb.mmrMin;
         pct = Math.max(5, Math.min(100, Math.round(((recShown - rb.mmrMin) / span) * 100)));
@@ -2044,7 +2044,7 @@ function renderWorkout() {
     setField(+inp.dataset.i, +inp.dataset.j, "lbs", lb);
   }));
   list.querySelectorAll(".st-reps").forEach((inp) => inp.addEventListener("input", () => setField(+inp.dataset.i, +inp.dataset.j, "reps", inp.value)));
-  // make any rankpanel Go Premium CTA (free user at/above Alligator) open #premium-page.
+  // make any rankpanel Go Apex CTA (free user at/above Alligator) open #premium-page.
   wireGoPremium(list);
 }
 
@@ -2060,7 +2060,7 @@ function renderChart() {
     el.style.setProperty("--c", b.color);
     el.style.animationDelay = `${i * 0.04}s`;
     // the gallery is aspirational — show ALL beasts, just flag premium-only ones with
-    // a 🔒 so free users see what's behind the gate (tapping opens Go Premium).
+    // a 🔒 so free users see what's behind the gate (tapping opens Go Apex).
     el.innerHTML = `
       <div class="emoji">${b.emoji}${isLocked ? `<span class="card-lock">🔒</span>` : ""}</div>
       <div class="name">${b.name}</div>
@@ -2093,11 +2093,11 @@ function renderYourRanks() {
       const shownVal = shownMMR(rec.mmr);
       let next = "", pct = 100;
       // free user at OR above the Alligator tier (real MMR ≥ 51, even below the 125
-      // ceiling) → Go Premium CTA. Without this, a free lifter mid-Alligator would
+      // ceiling) → Go Apex CTA. Without this, a free lifter mid-Alligator would
       // see the LOCKED next beast (Eagle) name + a concrete target, leaking premium.
       if (hasMmr && !isPremium() && tierOf(realBeast.id) >= ALLIGATOR_TIER) {
         pct = 100;
-        next = `<div class="rankrow-next rankrow-locked" data-gopremium>🔒 Go Premium to rank past Alligator</div>`;
+        next = `<div class="rankrow-next rankrow-locked" data-gopremium>🔒 Go Apex to rank past Alligator</div>`;
       } else if (ti < BEASTS.length && hasMmr) {
         const nb = BEASTS[ti];               // next tier beast
         const span = nb.mmrMin - b.mmrMin;
@@ -2126,7 +2126,7 @@ function renderYourRanks() {
   wireGoPremium(box);
 }
 
-// wire any [data-gopremium] element inside `root` to open the Go Premium page. Safe
+// wire any [data-gopremium] element inside `root` to open the Go Apex page. Safe
 // to call repeatedly (binds once per element via a dataset flag). Load-order safe —
 // only ever called from render functions.
 function wireGoPremium(root) {
@@ -3136,9 +3136,9 @@ function refreshAvatars() {
   if (menuAv) menuAv.innerHTML = avatarInner();
   const menuName = document.getElementById("menuProfileName");
   if (menuName) menuName.textContent = profile.name ? profile.name : "Your Profile";
-  // keep the Menu premium button label in sync (Go Premium → 👑 Premium when active).
+  // keep the Menu premium button label in sync (Go Apex → 👑 Premium when active).
   const goLbl = document.getElementById("goPremiumLbl");
-  if (goLbl) goLbl.textContent = isPremium() ? "Premium" : "Go Premium";
+  if (goLbl) goLbl.textContent = isPremium() ? "Apex" : "Go Apex";
   const goBtn = document.getElementById("goPremiumBtn");
   if (goBtn) {
     goBtn.classList.toggle("owned", isPremium());
@@ -3237,7 +3237,7 @@ function renderProfile() {
       ${profile.username
         ? `<button type="button" class="ph-handle" id="phHandle">@${escapeHtml(profile.username)}</button>`
         : (cloudUser ? `<button type="button" class="ph-handle ph-handle-empty" id="phHandle">+ set @handle</button>` : "")}
-      <div class="ph-rank">${rankTxt}${isPremium() ? ` <span class="premium-badge">👑 PREMIUM</span>` : ""}</div>
+      <div class="ph-rank">${rankTxt}${isPremium() ? ` <span class="premium-badge">👑 APEX</span>` : ""}</div>
       <div class="ph-mmr"><span>Overall MMR</span><b>${mmr != null ? mmr.toLocaleString() : "—"}</b></div>
       ${profile.bio ? `<div class="ph-bio">${escapeHtml(profile.bio)}</div>` : ""}
       ${ms ? `<div class="ph-member">Member since ${ms}</div>` : ""}`;
@@ -4037,9 +4037,9 @@ function renderProgress() {
       lock.className = "lockstate";
       lock.innerHTML = `
         <div class="lock-emoji">🔒</div>
-        <div class="lock-title">Progress charts are a Premium feature</div>
+        <div class="lock-title">Progress charts are an Apex feature</div>
         <p class="lock-sub">MMR over time, per-lift strength, bodyweight, volume &amp; your training heatmap.</p>
-        <button class="btn premium-sub" data-gopremium type="button">👑 Go Premium</button>`;
+        <button class="btn premium-sub" data-gopremium type="button">👑 Go Apex</button>`;
       const after = panel.querySelector(".section-title");
       if (after && after.nextSibling) panel.insertBefore(lock, after.nextSibling);
       else panel.appendChild(lock);
