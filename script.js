@@ -1,4 +1,4 @@
-// Reptilift v3.47 — earn your beast rank per exercise from your MMR.
+// Reptilift v3.48 — earn your beast rank per exercise from your MMR.
 // v3.47 adds to the premium calorie tracker: a FOOD_DB search (built-in ~150 foods +
 // OpenFoodFacts online lookup, debounced + graceful-degrade offline) with a quantity
 // multiplier, and PHOTO logging (downscaled JPEG data URL on the optional entry.photo,
@@ -4744,6 +4744,18 @@ function localHasData() {
   // "non-empty" = any meaningful key present (ignore the sound preference alone).
   return SYNC_KEYS.some((k) => k !== "reptilift_sound" && localStorage.getItem(k) != null);
 }
+// REAL data = the user has actually used this device (ranked lifts, logged sets/
+// workouts, or set up their profile/premium). Used to decide who's authoritative on
+// login so a device with your data is NEVER auto-reverted to an old cloud snapshot.
+function localHasRealData() {
+  try {
+    if (bests && Object.keys(bests).length) return true;
+    if (Array.isArray(sets) && sets.length) return true;
+    if (Array.isArray(workouts) && workouts.length) return true;
+    if (profile && (profile.premium || profile.bodyweight || profile.name || profile.username || profile.avatar)) return true;
+  } catch (e) {}
+  return false;
+}
 
 // ---- pushCloud(): upsert local blob to the user's row (debounced caller below) ----
 async function pushCloud() {
@@ -4813,23 +4825,16 @@ async function onLogin(user) {
     if (!cloudHasData) {
       // New account / no cloud save yet → adopt this device's local data.
       await pushCloud();
-      // Brand-new user with an empty device (a true first signup) → run the
-      // onboarding wizard now that the gate is down. Existing local data means a
-      // returning user adopting cloud, so we skip it. Guarded + load-order safe.
-      if (!localHasData()) { try { maybeShowOnboarding(); } catch (e) {} }
+      // Brand-new user with an empty device (a true first signup) → run onboarding.
+      if (!localHasRealData()) { try { maybeShowOnboarding(); } catch (e) {} }
       return;
     }
-    // Cloud has a save. Decide whether to load it (new device) or keep local.
-    if (!localHasData()) {
-      applyCloud(cloud);                     // empty device → just take the cloud save
-      return;
-    }
-    // Both sides have data: AUTO-KEEP the more recently modified one — no prompt.
-    // localMod = this device's last data change; cloudMod = the row's updated_at.
-    const localMod = parseInt(localStorage.getItem("reptilift_lastmod") || "0", 10) || 0;
-    const cloudMod = row && row.updated_at ? Date.parse(row.updated_at) : 0;
-    if (cloudMod > localMod) applyCloud(cloud);   // cloud is newer → load it (reloads)
-    else await pushCloud();                       // local is newer (or tie) → keep local, push up
+    // Cloud has a save. KEY RULE: if THIS device already holds the user's real data,
+    // it is authoritative — keep it and push up. NEVER auto-overwrite a device that has
+    // your data with an old cloud snapshot (that caused "reopen → reverted to an old
+    // save"). Only a genuinely fresh/empty device pulls the cloud save down.
+    if (localHasRealData()) { await pushCloud(); return; }
+    applyCloud(cloud);                       // fresh device → restore from the cloud
   } catch (e) {
     setSyncStatus("offline");
   }
