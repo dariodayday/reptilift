@@ -1,4 +1,4 @@
-// Reptilift v3.49 — earn your beast rank per exercise from your MMR.
+// Reptilift v3.50 — earn your beast rank per exercise from your MMR.
 // v3.47 adds to the premium calorie tracker: a FOOD_DB search (built-in ~150 foods +
 // OpenFoodFacts online lookup, debounced + graceful-degrade offline) with a quantity
 // multiplier, and PHOTO logging (downscaled JPEG data URL on the optional entry.photo,
@@ -831,15 +831,10 @@ function premiumChanged() {
 // reptilift_calories: { goal, days: { "YYYY-MM-DD": [{ name, kcal, photo? }] } } (in
 // SYNC_KEYS). `photo` is an OPTIONAL small downscaled JPEG data URL — old {name,kcal}
 // entries stay valid. Non-premium sees a lock state with a Go Premium CTA. Premium gets:
-// set a goal, quick-add, a FOOD_DB search (built-in + OpenFoodFacts online when on),
+// set a goal, a FOOD_DB search (built-in + OpenFoodFacts online when on),
 // quantity multiplier, photo capture, manual entry, today's total vs goal with a
 // progress bar, delete, and a recent-days strip. All render + wiring lives here;
 // everything guarded; load-order safe (FOOD_DB is a plain const, no top-level calls).
-const CAL_QUICK = [
-  { name: "Chicken breast", kcal: 165 }, { name: "Protein shake", kcal: 150 },
-  { name: "Eggs (2)", kcal: 140 }, { name: "Rice (cup)", kcal: 200 },
-  { name: "Banana", kcal: 105 }, { name: "Snack", kcal: 250 },
-];
 // FOOD_DB: ~150 common foods. kcal is per the listed `serving`. Plain const array
 // (load-order safe — only read inside renderCalories handlers). Values are
 // reasonable rounded approximations, not lab-precise.
@@ -1040,9 +1035,6 @@ function renderCalories() {
   const pct = goal > 0 ? Math.min(100, Math.round((total / goal) * 100)) : 0;
   const over = goal > 0 && total > goal;
   const remaining = goal - total;
-  const quickHtml = CAL_QUICK.map((q) =>
-    `<button class="cal-quick" data-q="${escapeHtml(q.name)}" data-k="${q.kcal}" type="button">${escapeHtml(q.name)} <small>${q.kcal}</small></button>`
-  ).join("");
   const listHtml = entries.length
     ? entries.map((e, i) => `
         <div class="cal-entry">
@@ -1073,8 +1065,6 @@ function renderCalories() {
       <div class="progress"><i style="width:${pct}%"></i></div>
       <div class="cal-remain">${goal ? (over ? `${Math.abs(remaining).toLocaleString()} over goal` : `${remaining.toLocaleString()} left`) : "Set a goal above"}</div>
     </div>
-    <h3 class="sub">Quick add</h3>
-    <div class="cal-quickrow">${quickHtml}</div>
     <h3 class="sub">Add entry</h3>
     <div class="cal-search">
       <input type="text" id="calSearch" placeholder="🔎 Search foods (e.g. chicken, rice)…" autocomplete="off" />
@@ -1097,8 +1087,6 @@ function renderCalories() {
   // wiring (rebuilt each render — bind directly)
   const goalI = document.getElementById("calGoal");
   if (goalI) goalI.addEventListener("change", () => calSetGoal(goalI.value));
-  box.querySelectorAll(".cal-quick").forEach((b) =>
-    b.addEventListener("click", () => calAdd(b.dataset.q, b.dataset.k)));
   const nameI = document.getElementById("calName");
   const kcalI = document.getElementById("calKcal");
   const qtyI = document.getElementById("calQty");
@@ -6193,4 +6181,37 @@ document.querySelectorAll(".fr-bt").forEach((b) => b.addEventListener("click", (
     btn.addEventListener("click", () => addFriendByUsername(inp.value));
     inp.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); addFriendByUsername(inp.value); } });
   }
+})();
+
+// ===== central "+" FAB → ADD action sheet (Log a Workout / Add Food) =====
+// The + is an ACTION, not a tab — it opens a small sheet anchored above the bar.
+// Picking a choice navigates (switchTab) and closes; backdrop / Cancel dismiss.
+// The FAB rotates to ✕ while open. Fully guarded, bound once, load-order safe
+// (runs at bottom after switchTab + all panels exist).
+(function wireAddSheet() {
+  const fab = document.getElementById("addFab");
+  const sheet = document.getElementById("addSheet");
+  if (!fab || !sheet) return;   // markup missing → no-op, never throws
+  const openSheet = () => {
+    sheet.classList.remove("hidden");
+    sheet.setAttribute("aria-hidden", "false");
+    fab.classList.add("open");
+    fab.setAttribute("aria-expanded", "true");
+  };
+  const closeSheet = () => {
+    sheet.classList.add("hidden");
+    sheet.setAttribute("aria-hidden", "true");
+    fab.classList.remove("open");
+    fab.setAttribute("aria-expanded", "false");
+  };
+  const isOpen = () => !sheet.classList.contains("hidden");
+  fab.addEventListener("click", () => { isOpen() ? closeSheet() : openSheet(); });
+  // navigate on a choice, dismiss on backdrop / Cancel
+  sheet.addEventListener("click", (e) => {
+    const go = e.target.closest("[data-addgo]");
+    if (go) { closeSheet(); try { switchTab(go.dataset.addgo); } catch (err) {} return; }
+    if (e.target.closest("[data-addclose]")) closeSheet();
+  });
+  // Esc closes too
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && isOpen()) closeSheet(); });
 })();

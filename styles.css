@@ -97,6 +97,82 @@ body {
   background: var(--gold); box-shadow: 0 0 10px color-mix(in srgb, var(--gold) 70%, transparent);
 }
 
+/* ===== central raised "+" FAB (an action, not a tab) ===== */
+/* Takes one of the 5 bar slots but the circular button is lifted above the bar so
+   it pops. Gold gradient + glow, on-brand. Rotates to ✕ while the sheet is open. */
+.tab-fab {
+  flex: 1 1 0; min-width: 0;
+  display: flex; align-items: flex-start; justify-content: center;
+  background: none; border: 0; cursor: pointer; padding: 0;
+  position: relative;
+}
+.tab-fab .fab-ico {
+  display: flex; align-items: center; justify-content: center;
+  width: 56px; height: 56px; margin-top: -24px;
+  border-radius: var(--r-pill);
+  background: radial-gradient(120% 120% at 30% 25%, #ffe07a 0%, var(--gold) 45%, #d79a23 100%);
+  color: #21160a; font-size: 30px; font-weight: 700; line-height: 1;
+  box-shadow:
+    0 0 0 4px color-mix(in srgb, var(--card) 92%, #000),
+    0 6px 18px rgba(0, 0, 0, .5),
+    0 0 22px color-mix(in srgb, var(--gold) 60%, transparent);
+  transition: transform .22s cubic-bezier(.34,1.56,.64,1), box-shadow .2s;
+}
+.tab-fab:active .fab-ico { transform: scale(.92); }
+.tab-fab.open .fab-ico {
+  transform: rotate(135deg);
+  box-shadow:
+    0 0 0 4px color-mix(in srgb, var(--card) 92%, #000),
+    0 6px 18px rgba(0, 0, 0, .5),
+    0 0 30px color-mix(in srgb, var(--gold) 80%, transparent);
+}
+
+/* ===== ADD action sheet (opened by the + FAB) ===== */
+.addsheet {
+  position: fixed; inset: 0; z-index: 60;
+  display: flex; align-items: flex-end; justify-content: center;
+}
+.addsheet.hidden { display: none; }
+.addsheet-backdrop {
+  position: absolute; inset: 0;
+  background: rgba(4, 14, 9, .58);
+  backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px);
+  animation: addfade .2s ease;
+}
+.addsheet-card {
+  position: relative; z-index: 1;
+  width: 100%; max-width: 520px;
+  margin-bottom: calc(72px + env(safe-area-inset-bottom));
+  background: color-mix(in srgb, var(--card) 96%, #000);
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  padding: 14px 16px calc(16px + env(safe-area-inset-bottom));
+  box-shadow: 0 -10px 30px rgba(0, 0, 0, .5), 0 0 28px color-mix(in srgb, var(--gold) 18%, transparent);
+  animation: addslide .26s cubic-bezier(.22,1,.36,1);
+}
+.addsheet-grip { width: 38px; height: 4px; border-radius: 999px; background: var(--line); margin: 0 auto 12px; }
+.addsheet-title { font-family: var(--font-display); font-size: 16px; font-weight: 800; text-align: center; margin-bottom: 14px; }
+.addsheet-actions { display: flex; gap: 12px; }
+.addsheet-act {
+  flex: 1 1 0; min-width: 0;
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  padding: 18px 10px; cursor: pointer;
+  background: var(--card2); color: var(--text);
+  border: 1px solid var(--line); border-radius: var(--r-card);
+  transition: transform .12s, border-color .15s, box-shadow .15s;
+}
+.addsheet-act:active { transform: scale(.96); }
+.addsheet-act:hover { border-color: var(--gold); box-shadow: 0 0 16px color-mix(in srgb, var(--gold) 22%, transparent); }
+.addsheet-act .aa-ico { font-size: 30px; line-height: 1; }
+.addsheet-act .aa-lbl { font-size: 14px; font-weight: 700; }
+.addsheet-cancel {
+  display: block; width: 100%; margin-top: 12px;
+  background: none; border: 0; cursor: pointer;
+  color: var(--muted); font-size: 14px; font-weight: 600; padding: 10px;
+}
+@keyframes addfade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes addslide { from { opacity: 0; transform: translateY(24px); } to { opacity: 1; transform: none; } }
+
 .panel { display: none; max-width: 760px; margin: 0 auto; padding: 0 16px; }
 .panel.active { display: block; animation: fade .25s ease; }
 @keyframes fade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
@@ -1685,13 +1761,6 @@ button.fr-card:active { background: var(--card2); }
 .cal-summary .progress { height: 10px; }
 .cal-summary .progress i { background: var(--c, var(--accent)); }
 .cal-remain { margin-top: 8px; font-size: 13px; color: var(--muted); font-weight: 600; }
-.cal-quickrow { display: flex; flex-wrap: wrap; gap: 8px; }
-.cal-quick {
-  background: var(--card); border: 1px solid var(--line); border-radius: var(--r-pill);
-  color: var(--text); font-family: inherit; font-size: 13px; font-weight: 600; padding: 8px 12px; cursor: pointer;
-}
-.cal-quick small { color: var(--muted); margin-left: 4px; }
-.cal-quick:active { transform: scale(.97); }
 /* food search */
 .cal-search { position: relative; margin-bottom: 8px; }
 .cal-search #calSearch {
