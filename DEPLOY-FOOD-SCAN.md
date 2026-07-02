@@ -1,43 +1,66 @@
 # Deploying the AI food-scan function
 
 The calorie tracker's "Snap your food" button posts a photo to a Supabase Edge
-Function (`supabase/functions/food-scan/index.ts`), which calls Claude vision and
-returns name + calories + macros. The Anthropic API key lives ONLY in Supabase
+Function (`supabase/functions/food-scan/index.ts`), which calls an AI vision
+model and returns name + calories + macros. API keys live ONLY in Supabase
 secrets — never in the client (the site is public on GitHub Pages). Until you
 deploy this, the button shows a friendly "isn't set up yet" note; nothing breaks.
 
-## One-time setup
+The function supports **two providers** — set whichever secret you have.
+If both are set, Anthropic is used.
 
-1. **Get an Anthropic API key** — create one at https://console.anthropic.com
-   (starts with `sk-ant-...`).
+| Provider | Secret | Cost |
+| --- | --- | --- |
+| Google Gemini | `GEMINI_API_KEY` | **FREE tier** (rate-limited; no card needed) |
+| Anthropic Claude | `ANTHROPIC_API_KEY` | prepaid credits ($5 minimum) |
 
-2. **Install the Supabase CLI** (not currently installed on this Mac):
+## Step 1 — get a key (pick ONE)
 
-   ```sh
-   brew install supabase/tap/supabase
-   ```
+**FREE — Google Gemini:**
+1. Go to https://aistudio.google.com/apikey and sign in with any Google account.
+2. Click **Create API key** — no card required. Copy the key (starts with `AIza`).
+   The free tier is rate-limited (per-minute and per-day caps) but plenty for
+   personal meal logging; if a scan hits the cap the app says "try again in a
+   minute."
 
-3. **Log in and link the project** (ref comes from `supabase-config.js`):
+**PAID — Anthropic Claude:**
+1. https://console.anthropic.com → Billing → buy the $5 minimum credits.
+2. API Keys → Create Key → copy the `sk-ant-...` key.
 
-   ```sh
-   cd ~/reptilift
-   supabase login
-   supabase link --project-ref uicqdjmdnatmgglkjurp
-   ```
+## Step 2 — link the Supabase CLI (one time)
 
-4. **Set the secret:**
+The CLI is already installed (`brew install supabase/tap/supabase`). Run:
 
-   ```sh
-   supabase secrets set ANTHROPIC_API_KEY=sk-ant-...your-key...
-   ```
+```sh
+cd ~/reptilift
+supabase login
+supabase link --project-ref uicqdjmdnatmgglkjurp
+```
 
-5. **Deploy the function** (JWT verification stays ON by default — do NOT pass
-   `--no-verify-jwt`; the function requires a signed-in user so strangers can't
-   burn your API budget):
+(`login` opens the browser — click Authorize. If `link` asks for a database
+password, just press Enter.)
 
-   ```sh
-   supabase functions deploy food-scan
-   ```
+## Step 3 — set the secret and deploy
+
+Free Gemini key:
+
+```sh
+supabase secrets set GEMINI_API_KEY=AIza...your-key...
+```
+
+…or paid Anthropic key:
+
+```sh
+supabase secrets set ANTHROPIC_API_KEY=sk-ant-...your-key...
+```
+
+Then deploy (JWT verification stays ON by default — do NOT pass
+`--no-verify-jwt`; the function requires a signed-in user so strangers can't
+burn your quota):
+
+```sh
+supabase functions deploy food-scan
+```
 
 ## Smoke test
 
@@ -65,5 +88,6 @@ A real food photo returns e.g.:
   "calories": 650, "protein_g": 38, "carbs_g": 62, "fat_g": 26, "confidence": "medium" }
 ```
 
-Costs: each scan is one Claude vision call on a ~1024px JPEG — fractions of a
-cent. The function rejects requests without a valid Supabase login (401).
+The function rejects requests without a valid Supabase login (401). To switch
+providers later, just set the other secret with `supabase secrets set` —
+it takes effect on the next scan, no redeploy needed.
