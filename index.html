@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover" />
   <title>Reptilift — train like a beast</title>
-  <meta name="theme-color" content="#0a1f16" />
+  <meta name="theme-color" content="#0a0a0a" />
   <link rel="manifest" href="manifest.json" />
   <link rel="icon" href="favicon.png" />
   <link rel="apple-touch-icon" href="apple-touch-icon.png" />
@@ -12,18 +12,321 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Bungee&family=Outfit:wght@400;500;600;700;800&family=Sora:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Anton&family=Outfit:wght@400;500;600;700;800&family=Sora:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <!-- STARTUP SPLASH: a simple, robust, image-driven cinematic. The glowing claw-slash
-       hero photo flares in with a white impact flash, crossfades into the reptile-eye
-       photo (slowly zooming/focusing), then the neon REPTILIFT title ignites over it
-       and settles before handing off to the app. All animation is CSS @keyframes keyed
-       off `.intro.go`; script.js (introTimers/playIntro) only toggles classes + times
-       the hand-off, so it's robust and never strands the user on a black screen. -->
-  <div id="intro" class="intro">
-    <video id="introVid" class="introVid" src="intro.mp4" muted playsinline autoplay preload="auto" aria-hidden="true"></video>
+  <!-- STARTUP SPLASH: a 7-beat cinematic drawn entirely with inline SVG + CSS
+       @keyframes (no video, no image assets — crisp at any size, works offline).
+       Beats: (1) claw slashes rip across the dark, (2) a slit reptile eye ignites
+       behind the gashes, (3) the eye opens wide (lids retract), (4) REPTILIFT fades
+       in over the eye, (5) the title takes over as the eye dims, (6) green lightning
+       crackles beneath it, (7) final lockup with a lens-flare streak. ALL motion is
+       keyed off `.intro.go` (styles.css); script.js (introTimers/playIntro) only
+       toggles classes + times the hand-off, and a tap/click skips straight to the
+       app — the user is never stranded on a black screen. -->
+  <div id="intro" class="intro" aria-hidden="true">
+    <!-- beats 2–5: a realistic reptile eye. The two lid groups FORM the almond
+         aperture (pointed corners) — closed they overlap to a slit, opening is just
+         translateY back to rest. Behind them: iris disc with a yellow-green core
+         fading to deep green, generated fibrous striations, a blurred luminous ring
+         hugging the pupil, a soft-edged vertical slit pupil (feGaussianBlur), an
+         off-center wet glint, dark vein cracks. The lids are gradient-lit masses
+         with a beaded ridge of rim-lit scales hugging the aperture and dimmer
+         plates receding into shadow. Generated geometry, deterministic. -->
+    <svg class="inEye" viewBox="0 0 800 600" preserveAspectRatio="xMidYMid slice" focusable="false">
+      <defs>
+        <radialGradient id="inIrisG" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stop-color="#f6ffb8"/>
+          <stop offset="10%" stop-color="#dcff62"/>
+          <stop offset="26%" stop-color="#ace832"/>
+          <stop offset="48%" stop-color="#63a819"/>
+          <stop offset="72%" stop-color="#2f5e0d"/>
+          <stop offset="92%" stop-color="#142a05"/>
+          <stop offset="100%" stop-color="#0a1503"/>
+        </radialGradient>
+        <radialGradient id="inSocketG" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stop-color="#121c08"/>
+          <stop offset="55%" stop-color="#0a1204"/>
+          <stop offset="100%" stop-color="#000"/>
+        </radialGradient>
+        <linearGradient id="inLidGT" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#010201"/>
+          <stop offset="62%" stop-color="#070f04"/>
+          <stop offset="100%" stop-color="#12220a"/>
+        </linearGradient>
+        <linearGradient id="inLidGB" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#12220a"/>
+          <stop offset="38%" stop-color="#070f04"/>
+          <stop offset="100%" stop-color="#010201"/>
+        </linearGradient>
+        <filter id="inB1"><feGaussianBlur stdDeviation="1.2"/></filter>
+        <filter id="inB2"><feGaussianBlur stdDeviation="2.2"/></filter>
+        <filter id="inB5"><feGaussianBlur stdDeviation="5"/></filter>
+      </defs>
+      <rect width="800" height="600" fill="url(#inSocketG)"/>
+      <g class="inIris">
+        <circle cx="400" cy="300" r="185" fill="url(#inIrisG)"/>
+        <g fill="none" stroke-linecap="round" filter="url(#inB1)">
+          <path d="M438.2 287.6Q485.4 267.9 535.3 256.1" stroke="#16330a" stroke-width="1.8" opacity="0.39"/>
+          <path d="M434.4 297.3Q491.1 289.9 548.3 288.2" stroke="#16330a" stroke-width="1.3" opacity="0.24"/>
+          <path d="M364.1 300.6Q324.5 301.2 284.9 301.8" stroke="#16330a" stroke-width="2.1" opacity="0.24"/>
+          <path d="M366.2 307.7Q326.7 313.7 288.4 325.3" stroke="#16330a" stroke-width="2.1" opacity="0.25"/>
+          <path d="M390.4 334.6Q375.7 380.6 364.6 427.8" stroke="#16330a" stroke-width="1.2" opacity="0.36"/>
+          <path d="M372.6 279.7Q334.3 257.7 302.2 227.5" stroke="#16330a" stroke-width="2.1" opacity="0.34"/>
+          <path d="M357.8 294.5Q316.1 291.3 274.9 283.8" stroke="#16330a" stroke-width="2.4" opacity="0.34"/>
+          <path d="M367.8 327.3Q342.4 342.9 322.9 365.4" stroke="#16330a" stroke-width="1.9" opacity="0.40"/>
+          <path d="M375.8 266.9Q343.7 226.0 314.5 183.1" stroke="#16330a" stroke-width="1.1" opacity="0.44"/>
+          <path d="M406.8 342.8Q411.2 366.7 414.4 390.8" stroke="#16330a" stroke-width="1.8" opacity="0.25"/>
+          <path d="M369.7 318.3Q328.6 336.8 293.0 364.4" stroke="#16330a" stroke-width="2.3" opacity="0.40"/>
+          <path d="M366.7 307.5Q329.6 311.9 294.1 323.7" stroke="#16330a" stroke-width="1.4" opacity="0.40"/>
+          <path d="M428.3 277.7Q465.6 255.4 496.0 224.5" stroke="#16330a" stroke-width="1.6" opacity="0.34"/>
+          <path d="M439.2 298.8Q477.4 297.8 515.6 296.6" stroke="#16330a" stroke-width="1.2" opacity="0.25"/>
+          <path d="M402.3 342.3Q406.5 374.7 405.9 407.4" stroke="#16330a" stroke-width="2.4" opacity="0.33"/>
+          <path d="M372.4 322.1Q338.9 344.2 310.0 372.1" stroke="#16330a" stroke-width="1.2" opacity="0.33"/>
+          <path d="M374.4 265.7Q355.6 237.9 334.3 212.0" stroke="#16330a" stroke-width="2.3" opacity="0.31"/>
+          <path d="M439.4 289.8Q483.5 277.5 527.9 266.7" stroke="#16330a" stroke-width="1.8" opacity="0.31"/>
+          <path d="M435.9 312.8Q468.1 320.4 497.8 334.9" stroke="#16330a" stroke-width="2.1" opacity="0.44"/>
+          <path d="M387.1 261.3Q372.4 218.2 358.3 174.9" stroke="#16330a" stroke-width="1.3" opacity="0.39"/>
+          <path d="M432.2 275.2Q455.0 263.5 472.0 244.4" stroke="#16330a" stroke-width="1.0" opacity="0.21"/>
+          <path d="M411.3 263.0Q427.9 224.8 435.5 183.7" stroke="#16330a" stroke-width="2.4" opacity="0.21"/>
+          <path d="M362.7 316.9Q311.0 334.8 263.5 361.8" stroke="#16330a" stroke-width="1.0" opacity="0.21"/>
+          <path d="M378.6 272.5Q353.5 241.6 329.5 209.7" stroke="#16330a" stroke-width="2.4" opacity="0.41"/>
+          <path d="M425.5 274.1Q464.4 242.0 495.8 202.7" stroke="#16330a" stroke-width="1.6" opacity="0.39"/>
+          <path d="M359.6 313.9Q315.0 331.6 269.0 345.2" stroke="#16330a" stroke-width="2.4" opacity="0.35"/>
+          <path d="M416.5 270.0Q439.0 236.7 455.2 199.9" stroke="#16330a" stroke-width="2.2" opacity="0.37"/>
+          <path d="M397.6 342.0Q393.8 391.4 392.1 440.9" stroke="#16330a" stroke-width="2.0" opacity="0.35"/>
+          <path d="M364.2 281.1Q320.9 257.3 276.9 234.9" stroke="#16330a" stroke-width="1.2" opacity="0.35"/>
+          <path d="M430.3 317.9Q462.5 332.4 490.8 353.4" stroke="#16330a" stroke-width="2.2" opacity="0.39"/>
+          <path d="M407.0 263.3Q420.5 218.4 424.3 171.8" stroke="#16330a" stroke-width="1.9" opacity="0.39"/>
+          <path d="M438.6 301.2Q480.1 300.7 521.4 303.9" stroke="#16330a" stroke-width="1.9" opacity="0.26"/>
+          <path d="M372.3 321.3Q340.7 352.6 302.4 375.0" stroke="#16330a" stroke-width="2.1" opacity="0.43"/>
+          <path d="M391.7 335.6Q382.6 385.3 368.8 433.9" stroke="#16330a" stroke-width="1.9" opacity="0.34"/>
+          <path d="M415.7 332.2Q434.5 357.7 442.9 388.2" stroke="#16330a" stroke-width="1.1" opacity="0.43"/>
+          <path d="M422.6 270.7Q443.6 251.7 456.6 226.6" stroke="#16330a" stroke-width="1.0" opacity="0.37"/>
+          <path d="M429.1 282.4Q476.5 252.5 525.0 224.6" stroke="#16330a" stroke-width="1.3" opacity="0.42"/>
+          <path d="M435.7 302.0Q464.1 301.6 492.2 305.1" stroke="#16330a" stroke-width="2.0" opacity="0.26"/>
+          <path d="M369.1 269.3Q348.8 246.4 325.7 226.3" stroke="#16330a" stroke-width="1.6" opacity="0.42"/>
+          <path d="M426.6 326.0Q454.7 350.1 479.5 377.8" stroke="#16330a" stroke-width="1.3" opacity="0.37"/>
+          <path d="M380.5 341.0L356.0 392.7" stroke="#d9f76a" stroke-width="0.9" opacity="0.17"/>
+          <path d="M402.1 337.5L405.7 401.4" stroke="#d9f76a" stroke-width="0.8" opacity="0.11"/>
+          <path d="M418.1 332.8L457.3 404.1" stroke="#d9f76a" stroke-width="1.0" opacity="0.20"/>
+          <path d="M420.7 260.4L434.6 233.8" stroke="#d9f76a" stroke-width="1.0" opacity="0.20"/>
+          <path d="M391.9 340.4L377.6 411.9" stroke="#d9f76a" stroke-width="0.9" opacity="0.16"/>
+          <path d="M386.3 343.5L375.8 377.3" stroke="#d9f76a" stroke-width="0.8" opacity="0.11"/>
+          <path d="M441.0 308.6L502.2 321.5" stroke="#d9f76a" stroke-width="1.0" opacity="0.19"/>
+          <path d="M394.2 259.2L383.2 181.5" stroke="#d9f76a" stroke-width="0.8" opacity="0.22"/>
+          <path d="M368.2 271.2L335.4 241.3" stroke="#d9f76a" stroke-width="1.3" opacity="0.11"/>
+          <path d="M403.0 258.6L408.0 191.7" stroke="#d9f76a" stroke-width="0.8" opacity="0.19"/>
+          <path d="M374.3 267.8L345.5 231.7" stroke="#d9f76a" stroke-width="1.0" opacity="0.13"/>
+          <path d="M358.3 305.2L329.4 308.9" stroke="#d9f76a" stroke-width="0.8" opacity="0.19"/>
+          <path d="M381.9 330.4L360.9 365.9" stroke="#eaffa0" stroke-width="1.2" opacity="0.28"/>
+          <path d="M434.7 294.7L457.4 291.2" stroke="#eaffa0" stroke-width="1.3" opacity="0.35"/>
+          <path d="M402.4 267.4L404.8 234.1" stroke="#eaffa0" stroke-width="1.1" opacity="0.37"/>
+          <path d="M409.4 268.8L418.8 237.7" stroke="#eaffa0" stroke-width="1.3" opacity="0.27"/>
+          <path d="M383.2 330.4L367.7 358.7" stroke="#eaffa0" stroke-width="1.1" opacity="0.31"/>
+          <path d="M372.9 278.6L340.9 253.2" stroke="#eaffa0" stroke-width="1.2" opacity="0.23"/>
+          <path d="M384.1 327.3L368.7 353.6" stroke="#eaffa0" stroke-width="1.4" opacity="0.27"/>
+          <path d="M371.6 279.1L355.7 267.3" stroke="#eaffa0" stroke-width="1.4" opacity="0.23"/>
+          <path d="M380.0 271.1L368.1 253.9" stroke="#eaffa0" stroke-width="0.9" opacity="0.24"/>
+          <path d="M396.6 268.0L392.3 228.2" stroke="#eaffa0" stroke-width="1.1" opacity="0.32"/>
+        </g>
+        <g stroke-linecap="round">
+          <path d="M370.2 221.6L346.2 197.6L345.2 184.3L346.7 154.7" stroke="#0d2003" stroke-width="1.6" fill="none" opacity="0.39"/>
+          <path d="M323.6 310.3L311.6 318.9L291.6 333.6L280.3 349.8" stroke="#0d2003" stroke-width="1.3" fill="none" opacity="0.39"/>
+          <path d="M353.9 239.6L333.9 202.5L321.6 193.1L288.4 181.9" stroke="#0d2003" stroke-width="1.5" fill="none" opacity="0.31"/>
+          <path d="M414.9 385.3L423.5 417.4L449.8 435.2L466.8 447.7" stroke="#0d2003" stroke-width="1.8" fill="none" opacity="0.40"/>
+          <path d="M440.3 381.8L463.0 389.4L492.8 409.0L490.3 427.2" stroke="#0d2003" stroke-width="1.2" fill="none" opacity="0.31"/>
+        </g>
+        <ellipse cx="400" cy="300" rx="46" ry="118" fill="none" stroke="#eaffa0" stroke-width="14" opacity=".32" filter="url(#inB5)"/>
+        <path d="M400 190C412 250 417 276 417 300C417 324 412 350 400 410C388 350 383 324 383 300C383 276 388 250 400 190Z" fill="#020402" opacity=".55" filter="url(#inB5)"/>
+        <path d="M400 196C411 252 415 277 415 300C415 323 411 348 400 404C389 348 385 323 385 300C385 277 389 252 400 196Z" fill="#010301" filter="url(#inB2)"/>
+        <ellipse cx="368" cy="242" rx="13" ry="7" fill="#fbffe8" opacity=".85" transform="rotate(-24 368 242)" filter="url(#inB1)"/>
+        <ellipse cx="428" cy="352" rx="5" ry="3" fill="#fbffe8" opacity=".3" transform="rotate(-24 428 352)" filter="url(#inB1)"/>
+      </g>
+      <g class="inLidT">
+        <path d="M-60 -260H860V300Q400 80 -60 300Z" fill="url(#inLidGT)"/>
+        <path d="M-60 300Q400 80 860 300" fill="none" stroke="#d7ff5a" stroke-width="3" opacity=".75" filter="url(#inB2)"/>
+        <path d="M-60 290Q400 66 860 290" fill="none" stroke="#233d0c" stroke-width="9" opacity=".5" filter="url(#inB1)"/>
+        <g>
+          <path d="M95.5 229.4L90.3 233.9L83.5 233.8L77.6 228.9L83.3 222.9L91.7 224.0Z" fill="#101f08" stroke="rgba(198,250,100,0.19)" stroke-width="1"/>
+          <path d="M123.7 220.0L117.9 226.0L107.6 225.0L102.1 219.4L107.8 212.6L120.7 212.4Z" fill="#101f08" stroke="rgba(198,250,100,0.18)" stroke-width="1"/>
+          <path d="M156.3 212.6L151.1 217.0L141.3 217.9L137.4 212.5L143.6 206.7L150.8 205.5Z" fill="#101f08" stroke="rgba(198,250,100,0.27)" stroke-width="1"/>
+          <path d="M182.1 203.7L177.0 210.1L169.6 208.9L166.3 203.8L170.4 199.8L177.4 199.2Z" fill="#101f08" stroke="rgba(198,250,100,0.19)" stroke-width="1"/>
+          <path d="M210.8 198.1L204.9 204.5L195.3 204.7L188.9 198.0L194.0 190.0L204.2 190.8Z" fill="#101f08" stroke="rgba(198,250,100,0.29)" stroke-width="1"/>
+          <path d="M238.6 190.1L234.2 195.4L223.0 196.1L218.5 190.4L224.5 182.2L234.1 182.3Z" fill="#101f08" stroke="rgba(198,250,100,0.31)" stroke-width="1"/>
+          <path d="M256.8 190.1L252.4 195.3L246.1 196.2L241.6 189.7L245.9 185.5L253.4 185.8Z" fill="#101f08" stroke="rgba(198,250,100,0.26)" stroke-width="1"/>
+          <path d="M291.6 183.8L287.9 188.0L279.1 187.9L274.2 183.3L279.4 178.0L287.9 178.6Z" fill="#101f08" stroke="rgba(198,250,100,0.32)" stroke-width="1"/>
+          <path d="M317.6 179.9L313.8 186.6L303.8 187.2L296.1 179.2L303.1 172.4L313.4 172.3Z" fill="#101f08" stroke="rgba(198,250,100,0.31)" stroke-width="1"/>
+          <path d="M345.9 178.6L341.0 185.2L327.2 185.9L323.7 177.6L330.3 171.1L340.2 172.7Z" fill="#101f08" stroke="rgba(198,250,100,0.27)" stroke-width="1"/>
+          <path d="M368.4 179.4L365.4 185.5L354.6 185.7L350.3 180.3L353.9 173.2L366.0 173.4Z" fill="#101f08" stroke="rgba(198,250,100,0.27)" stroke-width="1"/>
+          <path d="M392.0 177.8L387.8 184.6L378.5 184.0L374.7 178.0L378.3 173.6L387.8 172.8Z" fill="#101f08" stroke="rgba(198,250,100,0.35)" stroke-width="1"/>
+          <path d="M428.3 177.9L422.9 184.0L412.5 184.2L407.5 179.2L414.0 172.5L423.9 172.4Z" fill="#101f08" stroke="rgba(198,250,100,0.28)" stroke-width="1"/>
+          <path d="M452.4 178.3L448.6 183.8L440.1 184.0L437.5 179.0L441.2 173.9L449.2 174.3Z" fill="#101f08" stroke="rgba(198,250,100,0.28)" stroke-width="1"/>
+          <path d="M483.2 178.7L479.1 184.8L467.1 185.1L461.5 178.2L467.2 171.3L476.8 169.8Z" fill="#101f08" stroke="rgba(198,250,100,0.23)" stroke-width="1"/>
+          <path d="M499.3 179.7L497.0 184.2L488.1 183.9L484.6 178.6L486.9 174.3L495.0 174.2Z" fill="#101f08" stroke="rgba(198,250,100,0.21)" stroke-width="1"/>
+          <path d="M532.4 181.4L527.7 188.9L515.5 188.8L509.1 182.5L517.0 175.5L526.4 176.2Z" fill="#101f08" stroke="rgba(198,250,100,0.29)" stroke-width="1"/>
+          <path d="M553.7 189.9L550.8 193.6L543.4 194.9L540.0 190.3L543.7 185.5L550.5 184.2Z" fill="#101f08" stroke="rgba(198,250,100,0.30)" stroke-width="1"/>
+          <path d="M588.5 194.8L583.6 200.0L573.3 199.7L568.5 195.0L573.9 188.0L582.8 188.0Z" fill="#101f08" stroke="rgba(198,250,100,0.19)" stroke-width="1"/>
+          <path d="M610.4 199.1L607.9 204.4L599.7 204.8L593.5 198.4L598.7 194.2L607.7 194.2Z" fill="#101f08" stroke="rgba(198,250,100,0.26)" stroke-width="1"/>
+          <path d="M641.2 203.5L638.1 208.7L630.5 208.0L626.6 203.9L631.0 198.9L637.9 199.9Z" fill="#101f08" stroke="rgba(198,250,100,0.19)" stroke-width="1"/>
+          <path d="M668.4 211.5L665.9 216.7L657.4 217.2L651.9 211.7L656.5 206.9L665.6 205.7Z" fill="#101f08" stroke="rgba(198,250,100,0.27)" stroke-width="1"/>
+          <path d="M696.5 220.4L691.1 227.7L682.2 227.5L677.2 221.0L681.6 215.6L691.5 215.6Z" fill="#101f08" stroke="rgba(198,250,100,0.19)" stroke-width="1"/>
+          <path d="M723.4 226.1L719.4 231.6L708.5 233.1L703.1 226.1L709.4 219.9L720.2 219.6Z" fill="#101f08" stroke="rgba(198,250,100,0.24)" stroke-width="1"/>
+          <path d="M140.0 187.1L132.2 201.6L115.4 200.1L102.0 186.4L111.7 177.3L128.5 174.2Z" fill="#0a1405" stroke="rgba(178,240,80,0.02)" stroke-width="1"/>
+          <path d="M193.2 174.4L185.9 182.5L169.3 184.8L162.1 173.3L170.0 165.2L187.9 165.0Z" fill="#0c1706" stroke="rgba(178,240,80,0.03)" stroke-width="1"/>
+          <path d="M244.3 167.0L237.4 183.2L212.8 175.2L214.7 163.5L233.3 157.6Z" fill="#0c1706" stroke="rgba(178,240,80,0.04)" stroke-width="1"/>
+          <path d="M285.4 157.1L272.5 171.7L251.8 168.9L248.0 147.9L272.4 144.0Z" fill="#0a1405" stroke="rgba(178,240,80,0.03)" stroke-width="1"/>
+          <path d="M332.3 158.0L321.2 168.8L302.9 165.3L303.6 152.8L324.9 147.9Z" fill="#0c1706" stroke="rgba(178,240,80,0.05)" stroke-width="1"/>
+          <path d="M368.3 152.6L359.1 162.2L344.4 162.6L337.3 152.9L343.8 145.6L357.7 142.3Z" fill="#0c1706" stroke="rgba(178,240,80,0.05)" stroke-width="1"/>
+          <path d="M432.3 145.1L413.9 160.4L391.5 154.0L395.3 136.8L416.9 134.5Z" fill="#0c1706" stroke="rgba(178,240,80,0.06)" stroke-width="1"/>
+          <path d="M469.5 156.6L457.2 166.0L438.9 166.0L430.3 155.4L441.2 140.2L460.4 139.4Z" fill="#0c1706" stroke="rgba(178,240,80,0.06)" stroke-width="1"/>
+          <path d="M498.9 151.4L486.1 167.3L463.1 159.9L465.3 143.0L481.5 136.4Z" fill="#0c1706" stroke="rgba(178,240,80,0.05)" stroke-width="1"/>
+          <path d="M555.6 164.0L541.2 175.6L526.0 173.2L528.1 156.9L543.3 151.8Z" fill="#0a1405" stroke="rgba(178,240,80,0.03)" stroke-width="1"/>
+          <path d="M602.3 174.2L597.2 180.8L584.7 182.1L572.3 171.1L584.2 162.5L597.5 162.4Z" fill="#0a1405" stroke="rgba(178,240,80,0.02)" stroke-width="1"/>
+          <path d="M659.2 189.8L650.2 201.1L631.6 200.3L620.1 189.6L627.9 177.0L647.4 176.7Z" fill="#0a1405" stroke="rgba(178,240,80,0.02)" stroke-width="1"/>
+          <path d="M693.0 195.4L685.1 205.4L672.0 201.9L665.6 192.0L670.8 185.9L684.0 185.4Z" fill="#0c1706" stroke="rgba(178,240,80,0.03)" stroke-width="1"/>
+          <path d="M147.1 155.8L134.8 168.2L104.8 161.9L111.5 144.5L133.0 142.4Z" fill="#0c1706" stroke="rgba(178,240,80,0.01)" stroke-width="1"/>
+          <path d="M235.8 140.6L223.2 151.9L203.8 146.1L202.5 130.6L222.7 126.7Z" fill="#0a1405" stroke="rgba(178,240,80,0.02)" stroke-width="1"/>
+          <path d="M293.0 127.2L287.2 136.4L268.1 132.0L270.2 119.9L285.7 117.9Z" fill="#0a1405" stroke="rgba(178,240,80,0.02)" stroke-width="1"/>
+          <path d="M371.3 113.1L357.2 126.9L338.8 125.6L338.3 106.4L357.6 103.1Z" fill="#0c1706" stroke="rgba(178,240,80,0.03)" stroke-width="1"/>
+          <path d="M458.8 115.4L453.2 125.1L437.9 125.6L430.8 117.3L437.7 109.0L449.0 108.5Z" fill="#0c1706" stroke="rgba(178,240,80,0.03)" stroke-width="1"/>
+          <path d="M542.3 121.5L536.8 133.7L516.3 133.3L511.4 121.2L521.1 113.9L537.1 113.2Z" fill="#0c1706" stroke="rgba(178,240,80,0.03)" stroke-width="1"/>
+          <path d="M615.6 147.9L609.4 157.1L595.6 158.7L586.5 148.4L595.5 134.7L606.7 137.1Z" fill="#0c1706" stroke="rgba(178,240,80,0.01)" stroke-width="1"/>
+          <path d="M682.1 156.6L670.5 167.2L644.9 162.5L649.6 149.8L667.9 142.4Z" fill="#0a1405" stroke="rgba(178,240,80,0.01)" stroke-width="1"/>
+        </g>
+      </g>
+      <g class="inLidB">
+        <path d="M-60 860H860V300Q400 520 -60 300Z" fill="url(#inLidGB)"/>
+        <path d="M-60 300Q400 520 860 300" fill="none" stroke="#d7ff5a" stroke-width="3" opacity=".65" filter="url(#inB2)"/>
+        <path d="M-60 310Q400 534 860 310" fill="none" stroke="#233d0c" stroke-width="9" opacity=".5" filter="url(#inB1)"/>
+        <g>
+          <path d="M96.5 370.3L90.0 377.4L78.8 377.0L74.3 371.6L78.5 364.1L91.6 364.0Z" fill="#101f08" stroke="rgba(198,250,100,0.18)" stroke-width="1"/>
+          <path d="M124.2 382.0L118.3 388.7L109.5 388.0L103.4 380.7L107.8 375.0L118.5 374.7Z" fill="#101f08" stroke="rgba(198,250,100,0.25)" stroke-width="1"/>
+          <path d="M156.4 391.5L152.9 397.3L144.9 396.5L139.8 392.0L144.6 385.5L152.8 386.6Z" fill="#101f08" stroke="rgba(198,250,100,0.22)" stroke-width="1"/>
+          <path d="M184.7 399.9L180.7 404.9L170.8 404.3L165.7 398.9L171.4 393.7L180.5 393.9Z" fill="#101f08" stroke="rgba(198,250,100,0.24)" stroke-width="1"/>
+          <path d="M204.0 401.5L200.5 406.4L192.3 407.3L186.8 401.3L192.0 395.0L200.8 396.5Z" fill="#101f08" stroke="rgba(198,250,100,0.23)" stroke-width="1"/>
+          <path d="M238.9 407.0L232.5 413.4L223.6 412.3L219.4 407.5L222.2 400.8L233.7 400.6Z" fill="#101f08" stroke="rgba(198,250,100,0.31)" stroke-width="1"/>
+          <path d="M258.1 410.0L253.5 415.4L244.6 415.1L241.7 410.0L245.2 404.8L253.7 404.6Z" fill="#101f08" stroke="rgba(198,250,100,0.27)" stroke-width="1"/>
+          <path d="M288.9 414.1L284.7 420.7L275.2 421.0L269.8 414.8L275.3 408.9L282.9 408.2Z" fill="#101f08" stroke="rgba(198,250,100,0.34)" stroke-width="1"/>
+          <path d="M317.3 418.2L313.7 424.6L305.7 424.5L300.2 419.3L305.1 412.8L314.1 414.0Z" fill="#101f08" stroke="rgba(198,250,100,0.21)" stroke-width="1"/>
+          <path d="M345.1 422.5L342.0 428.4L331.4 427.0L327.9 421.7L330.6 416.2L340.2 416.2Z" fill="#101f08" stroke="rgba(198,250,100,0.31)" stroke-width="1"/>
+          <path d="M362.9 422.5L359.9 426.5L351.2 427.5L345.9 421.9L350.6 415.8L358.6 417.0Z" fill="#101f08" stroke="rgba(198,250,100,0.37)" stroke-width="1"/>
+          <path d="M391.6 421.4L385.7 426.1L377.1 426.5L372.8 420.5L376.4 415.4L386.6 414.6Z" fill="#101f08" stroke="rgba(198,250,100,0.33)" stroke-width="1"/>
+          <path d="M425.7 424.0L421.9 428.2L413.3 428.9L409.8 423.5L414.4 419.0L421.2 418.7Z" fill="#101f08" stroke="rgba(198,250,100,0.25)" stroke-width="1"/>
+          <path d="M448.0 423.3L442.8 430.5L431.9 431.4L425.8 423.3L430.0 417.9L441.5 416.8Z" fill="#101f08" stroke="rgba(198,250,100,0.33)" stroke-width="1"/>
+          <path d="M473.7 420.7L469.4 424.8L460.2 425.6L455.9 420.6L462.0 414.2L469.5 414.4Z" fill="#101f08" stroke="rgba(198,250,100,0.32)" stroke-width="1"/>
+          <path d="M507.1 415.9L501.6 422.9L488.5 421.7L484.7 415.9L489.8 408.8L498.7 408.7Z" fill="#101f08" stroke="rgba(198,250,100,0.31)" stroke-width="1"/>
+          <path d="M530.8 415.5L526.3 422.1L517.4 423.0L511.4 415.2L516.4 410.8L526.0 409.1Z" fill="#101f08" stroke="rgba(198,250,100,0.31)" stroke-width="1"/>
+          <path d="M553.0 411.8L549.9 416.9L538.2 417.1L535.2 411.5L539.8 405.1L550.5 405.2Z" fill="#101f08" stroke="rgba(198,250,100,0.23)" stroke-width="1"/>
+          <path d="M586.9 406.9L581.7 413.4L570.7 413.3L564.1 406.1L571.2 399.8L579.8 398.7Z" fill="#101f08" stroke="rgba(198,250,100,0.22)" stroke-width="1"/>
+          <path d="M610.3 402.6L606.5 406.1L600.1 406.6L596.5 401.8L600.1 397.8L606.9 397.8Z" fill="#101f08" stroke="rgba(198,250,100,0.23)" stroke-width="1"/>
+          <path d="M644.0 396.5L637.0 404.7L624.4 404.5L620.9 397.0L625.2 389.2L637.8 389.5Z" fill="#101f08" stroke="rgba(198,250,100,0.17)" stroke-width="1"/>
+          <path d="M661.1 390.3L658.4 397.1L647.1 397.0L641.9 391.4L646.7 385.6L655.8 385.1Z" fill="#101f08" stroke="rgba(198,250,100,0.24)" stroke-width="1"/>
+          <path d="M690.2 380.1L684.7 388.1L674.3 386.6L669.4 381.6L672.6 374.0L683.7 373.9Z" fill="#101f08" stroke="rgba(198,250,100,0.23)" stroke-width="1"/>
+          <path d="M722.3 371.9L717.7 376.9L708.5 377.4L702.5 370.8L708.5 364.9L717.7 364.5Z" fill="#101f08" stroke="rgba(198,250,100,0.15)" stroke-width="1"/>
+          <path d="M135.7 408.1L125.1 416.1L111.9 411.4L113.2 399.7L127.6 396.1Z" fill="#0a1405" stroke="rgba(178,240,80,0.02)" stroke-width="1"/>
+          <path d="M190.9 421.0L184.0 428.9L166.6 427.3L160.7 418.4L166.4 409.2L182.6 409.3Z" fill="#0a1405" stroke="rgba(178,240,80,0.04)" stroke-width="1"/>
+          <path d="M238.6 430.4L227.9 442.5L201.6 438.1L204.3 421.6L232.6 415.9Z" fill="#0c1706" stroke="rgba(178,240,80,0.03)" stroke-width="1"/>
+          <path d="M272.7 437.9L259.2 452.2L240.8 446.1L239.6 432.3L258.6 424.6Z" fill="#0a1405" stroke="rgba(178,240,80,0.04)" stroke-width="1"/>
+          <path d="M331.0 440.8L320.7 450.0L301.9 449.5L293.9 439.7L303.7 427.7L321.1 427.1Z" fill="#0c1706" stroke="rgba(178,240,80,0.06)" stroke-width="1"/>
+          <path d="M376.2 440.0L366.4 452.8L350.9 452.8L337.8 443.2L347.9 428.0L362.2 430.8Z" fill="#0c1706" stroke="rgba(178,240,80,0.05)" stroke-width="1"/>
+          <path d="M423.7 448.8L418.3 456.4L400.7 457.9L391.9 448.2L396.9 435.2L418.9 436.5Z" fill="#0a1405" stroke="rgba(178,240,80,0.05)" stroke-width="1"/>
+          <path d="M457.0 451.1L449.9 462.0L431.6 461.3L424.0 451.7L433.0 442.8L448.1 441.2Z" fill="#0a1405" stroke="rgba(178,240,80,0.04)" stroke-width="1"/>
+          <path d="M505.8 442.9L496.8 450.9L478.5 448.6L477.7 437.0L495.3 430.8Z" fill="#0c1706" stroke="rgba(178,240,80,0.06)" stroke-width="1"/>
+          <path d="M536.6 436.8L532.1 446.8L516.1 446.9L507.5 437.6L510.5 427.7L526.5 427.2Z" fill="#0c1706" stroke="rgba(178,240,80,0.04)" stroke-width="1"/>
+          <path d="M608.4 431.4L599.8 437.7L589.6 439.1L579.6 432.8L586.1 423.7L601.7 423.1Z" fill="#0a1405" stroke="rgba(178,240,80,0.03)" stroke-width="1"/>
+          <path d="M633.8 430.9L624.0 442.6L603.8 438.8L600.8 422.3L619.5 415.4Z" fill="#0a1405" stroke="rgba(178,240,80,0.03)" stroke-width="1"/>
+          <path d="M673.2 414.5L663.3 426.6L643.5 426.1L643.5 412.2L660.8 406.6Z" fill="#0c1706" stroke="rgba(178,240,80,0.03)" stroke-width="1"/>
+          <path d="M152.3 444.0L143.3 457.5L126.1 452.0L127.2 438.3L143.8 436.8Z" fill="#0c1706" stroke="rgba(178,240,80,0.02)" stroke-width="1"/>
+          <path d="M224.8 462.9L219.1 469.7L206.0 471.8L197.9 461.3L205.3 456.0L218.8 456.0Z" fill="#0c1706" stroke="rgba(178,240,80,0.02)" stroke-width="1"/>
+          <path d="M299.5 468.8L290.8 477.3L278.4 479.9L266.5 467.8L274.1 456.4L292.3 459.0Z" fill="#0c1706" stroke="rgba(178,240,80,0.02)" stroke-width="1"/>
+          <path d="M372.0 480.7L363.8 494.0L342.0 491.4L338.5 474.0L358.7 467.2Z" fill="#0a1405" stroke="rgba(178,240,80,0.02)" stroke-width="1"/>
+          <path d="M466.1 483.1L453.7 496.5L430.8 494.6L424.6 480.4L432.2 468.5L455.6 469.8Z" fill="#0c1706" stroke="rgba(178,240,80,0.01)" stroke-width="1"/>
+          <path d="M539.6 471.0L530.6 482.8L512.9 482.6L501.7 473.0L514.5 461.7L531.1 461.6Z" fill="#0c1706" stroke="rgba(178,240,80,0.02)" stroke-width="1"/>
+          <path d="M617.2 457.6L608.2 466.7L595.1 462.7L595.1 452.1L609.6 451.0Z" fill="#0c1706" stroke="rgba(178,240,80,0.02)" stroke-width="1"/>
+          <path d="M683.0 444.5L673.9 456.4L660.6 455.6L649.4 444.3L659.5 434.4L672.6 432.7Z" fill="#0a1405" stroke="rgba(178,240,80,0.01)" stroke-width="1"/>
+        </g>
+      </g>
+    </svg>
+    <!-- beat 1: one paw swipe, upper-left → lower-right. Four ragged gashes on a
+         shared arc (middle two longest/deepest, outer two shallower), each built as
+         a jagged glow-edge shape with a dark torn core inset, so the acid green
+         reads as light escaping around the torn edges. Tips taper and drag out into
+         an exit hook; small scratch flecks ride alongside. Generated geometry. -->
+    <svg class="inSlash" viewBox="0 0 800 600" preserveAspectRatio="xMidYMid slice" focusable="false">
+      <defs>
+        <linearGradient id="inSlashG" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="#8fdc1e"/>
+          <stop offset="50%" stop-color="#d7ff5a"/>
+          <stop offset="100%" stop-color="#6fb414"/>
+        </linearGradient>
+      </defs>
+      <g class="s1">
+        <path class="g-edge" d="M215.0 92.0L234.1 102.9L252.6 114.6L271.8 124.6L292.3 131.6L311.5 141.5L330.4 151.9L347.5 165.6L367.7 173.1L383.5 188.8L402.4 198.9L418.5 213.5L437.7 223.0L460.3 227.2L477.8 239.7L496.8 249.9L513.2 264.0L532.2 274.5L552.0 284.1L569.6 296.7L588.0 308.4L605.0 322.0L614.2 323.3L605.0 322.0L588.0 308.4L571.9 293.7L555.4 279.4L538.3 266.0L522.5 250.8L506.4 235.9L490.2 220.9L468.7 214.1L451.6 200.6L431.8 191.4L415.2 176.7L399.5 160.4L376.2 157.5L359.9 141.8L336.7 139.4L318.3 127.5L298.4 118.7L277.6 111.8L256.5 105.8L236.0 98.2Z"/>
+        <path class="g-core" d="M215.0 92.0L234.3 102.2L253.8 112.0L273.1 121.8L292.3 131.8L311.4 141.8L330.3 152.0L349.2 162.3L368.0 172.7L386.7 183.2L405.3 193.9L423.8 204.7L442.3 215.6L460.7 226.6L479.0 237.9L497.3 249.2L515.5 260.7L533.7 272.4L551.9 284.1L570.2 295.9L588.0 308.4L605.0 322.0L609.6 322.6L605.0 322.0L588.0 308.4L571.5 294.2L555.1 279.8L538.3 266.0L521.3 252.5L503.9 239.5L486.3 226.8L468.5 214.5L450.3 202.6L432.0 191.1L413.4 179.9L394.5 169.2L375.4 158.9L356.1 149.0L336.6 139.5L316.9 130.5L297.0 121.8L276.8 113.5L256.5 105.7L235.9 98.4Z"/>
+      </g>
+      <g class="s2">
+        <path class="g-edge" d="M152.0 150.0L176.1 165.5L200.1 181.0L223.0 198.2L250.5 206.4L273.1 223.7L291.4 248.8L316.1 261.6L341.5 273.4L365.2 288.1L390.0 301.0L412.2 317.9L435.2 333.7L463.4 341.6L482.1 363.7L507.6 376.1L531.9 390.3L558.1 402.2L582.0 417.4L605.8 432.8L630.2 447.7L652.0 466.0L661.1 467.5L652.0 466.0L630.2 447.7L609.4 428.3L592.1 404.5L571.6 384.5L551.8 363.5L530.3 344.5L505.0 331.1L478.2 319.9L460.6 295.2L431.9 287.2L414.8 261.1L391.7 244.2L360.1 241.6L338.1 223.0L312.5 210.3L285.1 201.3L262.7 182.6L232.1 180.0L207.7 165.2L180.2 156.8Z"/>
+        <path class="g-core" d="M152.0 150.0L176.4 164.8L201.1 178.9L225.6 193.0L250.1 207.2L274.4 221.4L298.6 235.7L322.7 250.1L346.7 264.5L370.6 279.1L394.4 293.8L418.2 308.6L441.9 323.5L465.5 338.5L489.2 353.7L512.7 368.9L536.3 384.4L559.8 399.9L583.4 415.6L607.1 431.2L630.2 447.7L652.0 466.0L656.5 466.8L652.0 466.0L630.2 447.7L609.4 428.4L588.7 408.7L567.5 389.8L545.9 371.4L523.9 353.5L501.4 336.1L478.7 319.2L455.5 302.9L432.0 287.0L408.2 271.7L384.0 257.0L359.4 242.7L334.6 229.0L309.4 215.9L284.0 203.3L258.2 191.3L232.2 179.9L205.9 169.0L179.2 158.8Z"/>
+      </g>
+      <g class="s3">
+        <path class="g-edge" d="M120.0 226.0L142.5 241.3L164.0 258.5L188.1 269.8L212.6 280.3L232.9 299.0L259.2 306.0L282.1 319.4L300.0 341.5L320.0 359.5L345.4 368.3L372.4 374.8L391.8 393.7L417.3 403.0L441.1 415.1L460.6 433.6L482.9 448.0L506.0 461.5L529.2 474.9L551.8 489.4L575.1 503.1L596.0 520.0L605.1 521.4L596.0 520.0L575.1 503.1L556.5 483.4L536.0 466.0L517.8 445.5L497.7 427.5L478.6 407.9L454.7 395.1L431.3 381.9L407.7 369.0L384.9 354.9L367.5 332.0L347.4 313.1L316.1 313.3L298.5 289.9L270.6 284.9L249.3 267.6L222.8 260.3L198.0 249.7L172.1 241.4L146.6 232.4Z"/>
+        <path class="g-core" d="M120.0 226.0L143.2 239.8L166.6 252.9L190.0 266.0L213.2 279.2L236.3 292.5L259.3 305.8L282.2 319.2L305.1 332.7L327.8 346.3L350.5 359.9L373.1 373.7L395.7 387.6L418.3 401.5L440.7 415.6L463.2 429.9L485.6 444.2L508.1 458.7L530.5 473.2L553.1 487.7L575.1 503.1L596.0 520.0L600.5 520.7L596.0 520.0L575.1 503.1L555.1 485.1L535.3 467.0L514.9 449.4L494.2 432.3L473.1 415.8L451.7 399.6L429.9 384.0L407.8 368.8L385.5 354.0L362.7 339.8L339.7 326.1L316.4 312.8L292.9 300.1L269.0 287.8L244.9 276.1L220.5 264.8L195.8 254.1L170.9 243.9L145.7 234.3Z"/>
+      </g>
+      <g class="s4">
+        <path class="g-edge" d="M145.0 322.0L162.1 333.1L179.0 344.2L196.3 354.4L215.6 360.5L229.7 376.5L246.7 386.7L265.6 393.7L282.2 404.6L301.8 410.4L317.4 423.0L331.7 437.4L348.4 448.0L366.2 457.1L385.9 463.5L401.6 475.7L415.5 490.6L434.7 498.2L450.9 509.9L468.2 520.3L484.5 532.1L500.0 545.0L509.1 546.5L500.0 545.0L484.5 532.1L470.3 517.7L455.8 503.6L441.9 488.6L426.7 475.4L408.6 466.1L395.7 449.5L376.0 442.6L359.5 431.1L343.0 419.8L330.0 402.7L309.2 398.1L293.5 385.1L274.3 378.2L255.9 369.9L239.9 357.2L220.9 350.2L203.4 340.0L184.4 333.0L164.8 327.2Z"/>
+        <path class="g-core" d="M145.0 322.0L162.6 331.9L180.3 341.5L197.9 351.1L215.4 360.8L232.8 370.6L250.1 380.5L267.3 390.6L284.4 400.7L301.5 410.9L318.4 421.3L335.3 431.8L352.1 442.4L368.9 453.1L385.6 464.0L402.2 475.0L418.8 486.1L435.3 497.3L451.8 508.7L468.3 520.1L484.5 532.1L500.0 545.0L504.6 545.8L500.0 545.0L484.5 532.1L469.5 518.6L454.6 505.1L439.3 492.0L423.8 479.3L408.0 466.9L392.0 454.8L375.7 443.0L359.2 431.6L342.5 420.5L325.6 409.7L308.4 399.3L291.1 389.2L273.5 379.5L255.8 370.2L237.8 361.2L219.7 352.5L201.3 344.2L182.8 336.3L164.1 328.7Z"/>
+      </g>
+      <!-- branching scratch flecks trailing the swipe -->
+      <g class="sf" stroke="#c8f542" fill="none" stroke-linecap="round">
+        <path stroke-width="2.5" d="M258 122l30 20"/>
+        <path stroke-width="2" d="M448 250l26 19"/>
+        <path stroke-width="2" d="M203 292l24 15"/>
+        <path stroke-width="2.5" d="M356 420l28 20"/>
+        <path stroke-width="1.5" d="M545 350l22 17"/>
+        <path stroke-width="1.5" d="M300 208l18 12"/>
+        <path stroke-width="1.5" d="M470 480l20 15"/>
+      </g>
+    </svg>
+    <!-- beat 6: electric arcs crackling tight under the wordmark — thick tapered
+         forks with sharp kinks, blurred under-glow + a hotspot at the title base -->
+    <svg class="inZap" viewBox="0 0 800 600" preserveAspectRatio="xMidYMid slice" focusable="false">
+      <defs>
+        <filter id="inZB"><feGaussianBlur stdDeviation="3"/></filter>
+        <filter id="inZB2"><feGaussianBlur stdDeviation="7"/></filter>
+      </defs>
+      <ellipse cx="400" cy="352" rx="85" ry="13" fill="#d9ff4d" opacity=".6" filter="url(#inZB2)"/>
+      <g fill="none" stroke="#b6ff2e" stroke-linejoin="round" stroke-linecap="round" opacity=".5" filter="url(#inZB)">
+        <path stroke-width="11.0" d="M370.0 352.0L349.0 367.1L323.7 375.0L306.4 395.3"/>
+        <path stroke-width="5.5" d="M306.4 395.3L276.2 410.4L253.5 440.8"/>
+        <path stroke-width="11.0" d="M430.0 352.0L458.6 345.0L483.8 351.7L510.6 341.6"/>
+        <path stroke-width="5.5" d="M510.6 341.6L544.4 343.2L576.6 334.5"/>
+        <path stroke-width="6.6" d="M385.0 355.0L382.9 376.4L366.8 394.1"/>
+        <path stroke-width="3.3" d="M366.8 394.1L362.9 417.0L351.5 434.2"/>
+        <path stroke-width="6.6" d="M415.0 355.0L431.1 366.6L437.9 389.6"/>
+        <path stroke-width="3.3" d="M437.9 389.6L456.9 411.1L463.5 439.9"/>
+        <path stroke-width="4.0" d="M323.7 375.0L323.2 387.2L315.8 396.3L314.4 411.4"/>
+        <path stroke-width="4.0" d="M483.8 351.7L499.6 359.9L505.4 369.0L515.8 378.6"/>
+        <path stroke-width="4.4" d="M400.0 356.0L405.3 363.9L406.9 373.4L411.5 381.1"/>
+      </g>
+      <g fill="none" stroke="#eeffa0" stroke-linejoin="round" stroke-linecap="round">
+        <path stroke-width="5.0" d="M370.0 352.0L349.0 367.1L323.7 375.0L306.4 395.3"/>
+        <path stroke-width="2.5" d="M306.4 395.3L276.2 410.4L253.5 440.8"/>
+        <path stroke-width="5.0" d="M430.0 352.0L458.6 345.0L483.8 351.7L510.6 341.6"/>
+        <path stroke-width="2.5" d="M510.6 341.6L544.4 343.2L576.6 334.5"/>
+        <path stroke-width="3.0" d="M385.0 355.0L382.9 376.4L366.8 394.1"/>
+        <path stroke-width="1.5" d="M366.8 394.1L362.9 417.0L351.5 434.2"/>
+        <path stroke-width="3.0" d="M415.0 355.0L431.1 366.6L437.9 389.6"/>
+        <path stroke-width="1.5" d="M437.9 389.6L456.9 411.1L463.5 439.9"/>
+        <path stroke-width="1.8" d="M323.7 375.0L323.2 387.2L315.8 396.3L314.4 411.4"/>
+        <path stroke-width="1.8" d="M483.8 351.7L499.6 359.9L505.4 369.0L515.8 378.6"/>
+        <path stroke-width="2.0" d="M400.0 356.0L405.3 363.9L406.9 373.4L411.5 381.1"/>
+      </g>
+    </svg>
+    <!-- beats 4–7: the wordmark + the final lens-flare streak -->
+    <div class="inTitle">REPTILIFT</div>
+    <div class="inFlare"></div>
   </div>
 
   <div id="app">
@@ -36,7 +339,7 @@
 
     <div class="walletbar">
       <button class="walletchip" data-go="shop" title="Scales"><span class="wc-coin">🦎</span> <b data-wallet>0</b></button>
-      <div class="streakchip" id="streakChip" title="Day streak"><span class="sc-fire">🔥</span> <b id="topStreak">0</b></div>
+      <div class="streakchip" id="streakChip" title="Day streak"><span class="sc-fire" data-icon="flame"></span> <b id="topStreak">0</b></div>
       <button class="acctchip" id="acctChip"><span class="ac-ico" id="acctChipAvatar">🦎</span> <span class="ac-lbl" id="acctChipLbl">Profile</span></button>
     </div>
 
@@ -57,19 +360,19 @@
            row builder + claim logic with the Quests page (see renderHomeQuests) -->
       <div class="homequests">
         <div class="hq-head">
-          <h3 class="hq-title">🎯 Daily Quests</h3>
+          <h3 class="hq-title"><span data-icon="target"></span> Daily Quests</h3>
           <button class="hq-more" data-go="quests" type="button">All quests →</button>
         </div>
         <div id="homeQuests" class="questlist"></div>
       </div>
 
       <nav class="menu">
-        <button class="menu-btn premium" id="goPremiumBtn" data-go="premium-page"><span>⭐</span> <span id="goPremiumLbl">Go Apex</span></button>
-        <button class="menu-btn" data-go="shop"><span>🛒</span> Shop</button>
-        <button class="menu-btn" data-go="friends-page"><span>👥</span> Friends &amp; Leaderboard</button>
-        <button class="menu-btn" data-go="plates-page"><span>🏋️</span> Plate Calculator</button>
-        <button class="menu-btn gold" id="flexBtn"><span>💪</span> Flex Card</button>
-        <button class="menu-btn" data-go="contact-page"><span>✉️</span> Contact</button>
+        <button class="menu-btn premium" id="goPremiumBtn" data-go="premium-page"><span class="mb-ico" data-icon="star"></span><span class="mb-lbl" id="goPremiumLbl">Go Apex</span><span class="mb-chev">›</span></button>
+        <button class="menu-btn" data-go="shop"><span class="mb-ico" data-icon="cart"></span><span class="mb-lbl">Shop</span><span class="mb-chev">›</span></button>
+        <button class="menu-btn" data-go="friends-page"><span class="mb-ico" data-icon="users"></span><span class="mb-lbl">Friends &amp; Leaderboard</span><span class="mb-chev">›</span></button>
+        <button class="menu-btn" data-go="plates-page"><span class="mb-ico" data-icon="barbell"></span><span class="mb-lbl">Plate Calculator</span><span class="mb-chev">›</span></button>
+        <button class="menu-btn" id="flexBtn"><span class="mb-ico" data-icon="zap"></span><span class="mb-lbl">Flex Card</span><span class="mb-chev">›</span></button>
+        <button class="menu-btn" data-go="contact-page"><span class="mb-ico" data-icon="mail"></span><span class="mb-lbl">Contact</span><span class="mb-chev">›</span></button>
       </nav>
       <div class="statbar">
         <div class="stat"><span id="statStreak">0</span><label>day streak</label></div>
@@ -86,7 +389,7 @@
       <!-- account wrapper (handle id kept intact for cloud-sync JS) -->
       <div class="account" id="account">
         <div class="acct-head">
-          <h3 class="acct-title">☁️ Cloud Sync</h3>
+          <h3 class="acct-title"><span data-icon="cloud"></span> Cloud Sync</h3>
           <span class="syncdot" id="syncDot" title="sync status"></span>
         </div>
 
@@ -136,7 +439,7 @@
         <h3 class="contact-head">Get in touch 🦎</h3>
         <p class="contact-sub">Questions, bugs, or feedback? We'd love to hear from you.</p>
 
-        <a class="contact-email" href="mailto:reptilift@gmail.com">✉️ reptilift@gmail.com</a>
+        <a class="contact-email" href="mailto:reptilift@gmail.com"><span data-icon="mail"></span> reptilift@gmail.com</a>
 
         <form id="contactForm" class="contact-form">
           <label class="pe-label">Topic
@@ -152,7 +455,7 @@
             <textarea id="contactMsg" rows="5" placeholder="What's on your mind?"></textarea>
           </label>
 
-          <button class="btn" id="contactSend" type="submit">✉️ Send email</button>
+          <button class="btn" id="contactSend" type="submit"><span data-icon="mail"></span> Send email</button>
         </form>
 
         <a class="contact-direct" href="mailto:reptilift@gmail.com">Email us directly</a>
@@ -167,7 +470,7 @@
          All wiring + render live in renderPlates() — load-order safe. -->
     <section id="plates-page" class="panel">
       <button class="backlink" data-go="home" type="button">← Menu</button>
-      <h2 class="section-title acct-pagetitle">🏋️ Plate Calculator</h2>
+      <h2 class="section-title acct-pagetitle"><span data-icon="barbell"></span> Plate Calculator</h2>
       <p class="hint">Enter a target weight and pick your bar — we'll show the plates to load on each side.</p>
 
       <div class="plates">
@@ -189,22 +492,22 @@
       </div>
     </section>
 
-    <!-- GO PREMIUM (dedicated page) — reached from the Menu "⭐ Go Apex" button and
+    <!-- GO PREMIUM (dedicated page) — reached from the Menu "Go Apex" row and
          from every lock CTA. Payment is NOT wired yet: a placeholder Subscribe button
          + a code-unlock (BEASTMODE) flip profile.premium. renderPremium() fills the
          dynamic bits (active state / restore) — load-order safe. -->
     <section id="premium-page" class="panel">
       <button class="backlink" data-go="home" type="button">← Menu</button>
-      <h2 class="section-title acct-pagetitle">👑 Reptilift Apex</h2>
+      <h2 class="section-title acct-pagetitle"><span data-icon="crown"></span> Reptilift Apex</h2>
       <p class="hint">Free lifters cap at the 🐊 Atrophy Alligator. Apex unlocks the full food chain and the pro tools.</p>
 
       <div class="premium-card">
         <div class="prem-perks">
           <div class="prem-perk"><span>🦅🐺🦍🐘🦏🐙</span><div><b>Unlock every rank</b><span>Climb past Alligator all the way to the Optimal Octopus.</span></div></div>
-          <div class="prem-perk"><span>🍗</span><div><b>Calorie + macro tracker</b><span>Daily kcal and protein / carbs / fat goals, logged on-brand.</span></div></div>
-          <div class="prem-perk"><span>📈</span><div><b>Progress charts</b><span>MMR, per-lift, bodyweight, volume &amp; the training heatmap.</span></div></div>
+          <div class="prem-perk"><span data-icon="utensils"></span><div><b>Calorie + macro tracker</b><span>Daily kcal and protein / carbs / fat goals, logged on-brand.</span></div></div>
+          <div class="prem-perk"><span data-icon="chart"></span><div><b>Progress charts</b><span>MMR, per-lift, bodyweight, volume &amp; the training heatmap.</span></div></div>
           <div class="prem-perk"><span>🦎</span><div><b>2× Scales</b><span>Double the Scales from every finished workout and quest claim.</span></div></div>
-          <div class="prem-perk"><span>👑</span><div><b>Exclusive Apex cosmetics</b><span>Apex Gold card, Apex Crown frame &amp; the Apex name color.</span></div></div>
+          <div class="prem-perk"><span data-icon="crown"></span><div><b>Exclusive Apex cosmetics</b><span>Apex Gold card, Apex Crown frame &amp; the Apex name color.</span></div></div>
         </div>
 
         <!-- shown when NOT premium -->
@@ -220,7 +523,7 @@
 
         <!-- shown when premium is active -->
         <div id="premActive" class="hidden">
-          <div class="prem-activebanner">✓ Apex active <span>👑</span></div>
+          <div class="prem-activebanner">✓ Apex active <span data-icon="crown"></span></div>
           <p class="prem-soon">All ranks, the calorie + macro tracker, progress charts, 2× Scales and the exclusive Apex cosmetics are unlocked. Thanks for feeding the beast.</p>
           <button class="btn ghost" id="premManageBtn" type="button">Turn off Apex (testing)</button>
         </div>
@@ -232,7 +535,7 @@
          render + wiring in renderCalories() / the wiring IIFE — load-order safe. -->
     <section id="calories-page" class="panel">
       <button class="backlink" data-go="home" type="button">← Menu</button>
-      <h2 class="section-title acct-pagetitle">🍗 Calorie Tracker</h2>
+      <h2 class="section-title acct-pagetitle"><span data-icon="utensils"></span> Calorie Tracker</h2>
       <div id="calBody"></div>
     </section>
 
@@ -286,7 +589,7 @@
           <div id="progVolume" class="prog-chart"></div>
         </div>
 
-        <button class="btn" id="progShareBtn">📸 Share my rank card</button>
+        <button class="btn" id="progShareBtn"><span data-icon="camera"></span> Share my rank card</button>
       </div>
 
       <!-- editable fields -->
@@ -296,7 +599,7 @@
         <div class="pe-avatarrow">
           <span class="pe-avatar" id="peAvatarPreview">🦎</span>
           <div class="pe-avatarbtns">
-            <button class="btn ghost" id="peAvatarPick" type="button">📷 Choose picture</button>
+            <button class="btn ghost" id="peAvatarPick" type="button"><span data-icon="camera"></span> Choose picture</button>
             <button class="btn ghost" id="peAvatarRemove" type="button">Remove</button>
           </div>
           <input type="file" id="peAvatarInput" accept="image/*" class="hidden" />
@@ -329,8 +632,8 @@
         <button class="btn" id="peSave" type="button">Save Profile</button>
         <span class="pe-saved hidden" id="peSaved">Saved ✓</span>
 
-        <button class="pe-accountlink" data-go="history" type="button">📜 Workout History</button>
-        <button class="pe-accountlink" data-go="account-page" type="button">☁️ Account &amp; sync settings</button>
+        <button class="pe-accountlink" data-go="history" type="button"><span data-icon="clock"></span> Workout History</button>
+        <button class="pe-accountlink" data-go="account-page" type="button"><span data-icon="cloud"></span> Account &amp; sync settings</button>
       </div>
     </section>
 
@@ -339,7 +642,7 @@
     <section id="achievements-page" class="panel">
       <button class="backlink" data-go="profile-page" type="button">← Profile</button>
       <div class="ach-headrow">
-        <h2 class="section-title acct-pagetitle">🏅 Achievements</h2>
+        <h2 class="section-title acct-pagetitle"><span data-icon="award"></span> Achievements</h2>
         <span class="ach-count" id="achCount">0 / 0 levels</span>
       </div>
       <p class="hint">Tiered badges that level up as you push past escalating goals. Chase the next tier on each card.</p>
@@ -355,9 +658,9 @@
 
       <!-- shown when Supabase isn't configured OR the user is logged out -->
       <div id="frLocked" class="fr-locked hidden">
-        <div class="fr-locked-emoji">👥</div>
+        <div class="fr-locked-emoji" data-icon="users"></div>
         <p class="fr-locked-msg" id="frLockedMsg">Sign in to add friends and climb the leaderboard.</p>
-        <button class="btn" data-go="account-page" type="button">☁️ Go to Account</button>
+        <button class="btn" data-go="account-page" type="button"><span data-icon="cloud"></span> Go to Account</button>
       </div>
 
       <!-- main friends UI (logged in) -->
@@ -369,8 +672,8 @@
         <div class="fr-tabs">
           <button class="fr-tab active" data-frtab="friends" type="button">Friends</button>
           <button class="fr-tab" data-frtab="requests" type="button">Requests <span class="fr-badge hidden" id="frReqBadge">0</span></button>
-          <button class="fr-tab" data-frtab="duels" type="button">⚔️ Duels <span class="fr-badge hidden" id="frDuelBadge">0</span></button>
-          <button class="fr-tab" data-frtab="board" type="button">🏆 Board</button>
+          <button class="fr-tab" data-frtab="duels" type="button"><span data-icon="swords"></span> Duels <span class="fr-badge hidden" id="frDuelBadge">0</span></button>
+          <button class="fr-tab" data-frtab="board" type="button"><span data-icon="trophy"></span> Board</button>
         </div>
 
         <!-- FRIENDS sub-panel -->
@@ -393,7 +696,7 @@
 
         <!-- DUELS sub-panel -->
         <div class="fr-sub" data-frpanel="duels">
-          <button class="btn duel-new-btn" id="duelNewBtn" type="button">⚔️ New duel</button>
+          <button class="btn duel-new-btn" id="duelNewBtn" type="button"><span data-icon="swords"></span> New duel</button>
           <div id="duelBody" class="duel-body"></div>
         </div>
 
@@ -420,7 +723,7 @@
     <div id="duelModal" class="modal hidden">
       <div class="modal-inner">
         <div class="duel-card">
-          <div class="duel-modal-emoji">⚔️</div>
+          <div class="duel-modal-emoji" data-icon="swords"></div>
           <h2 class="duel-modal-title">Challenge a friend</h2>
           <p class="duel-modal-sub">Most MMR gained wins. Strength differences don't matter — it's all about improvement.</p>
           <label class="duel-lbl">Opponent</label>
@@ -434,7 +737,7 @@
             <button class="duel-dur" data-days="30" type="button">1 month</button>
           </div>
           <div class="duel-modal-err" id="duelErr"></div>
-          <button class="btn" id="duelSend" type="button">Send challenge ⚔️</button>
+          <button class="btn" id="duelSend" type="button">Send challenge</button>
           <button class="btn ghost" id="duelCancel" type="button">Cancel</button>
         </div>
       </div>
@@ -483,8 +786,8 @@
     <section id="ranks" class="panel">
       <h2 class="section-title">Your Ranks</h2>
       <div class="ranks-actions">
-        <button class="btn ghost" data-go="profile-page">📈 Progress charts</button>
-        <button class="btn ghost" id="ranksShareBtn">📸 Share my rank</button>
+        <button class="btn ghost" data-go="profile-page"><span data-icon="chart"></span> Progress charts</button>
+        <button class="btn ghost" id="ranksShareBtn"><span data-icon="camera"></span> Share my rank</button>
       </div>
       <div id="yourRanks" class="yourranks"></div>
       <h2 class="section-title">The Food Chain</h2>
@@ -505,7 +808,7 @@
     <section id="log" class="panel">
       <h2 class="section-title">Workout</h2>
 
-      <button class="btn ghost" data-go="routines" type="button">📋 Routines</button>
+      <button class="btn ghost" data-go="routines" type="button"><span data-icon="clipboard"></span> Routines</button>
 
       <div class="profilebar">
         <label id="bwLbl">Your bodyweight (lbs)
@@ -513,13 +816,13 @@
         </label>
         <span class="profilehint">used to rank bodyweight lifts</span>
         <label class="soundtoggle">
-          <input type="checkbox" id="soundToggle" checked /> 🔊 Rank-up sound
+          <input type="checkbox" id="soundToggle" checked /> <span data-icon="sound"></span> Rank-up sound
         </label>
       </div>
 
       <!-- no active session -->
       <div id="sessionStart">
-        <button class="btn big" id="startBtn">▶ Start Workout</button>
+        <button class="btn big" id="startBtn"><span data-icon="play"></span> Start Workout</button>
         <p class="hint">Start a session, add machines &amp; exercises, log your sets.
           A rest timer kicks off after each set, and every lift earns its own rank.</p>
       </div>
@@ -527,7 +830,7 @@
       <!-- active session -->
       <div id="sessionActive" class="hidden">
         <div class="workout-bar">
-          <div class="wb-timer">⏱ <span id="sessTimer">0:00</span></div>
+          <div class="wb-timer"><span data-icon="timer"></span> <span id="sessTimer">0:00</span></div>
           <button class="btn danger" id="finishBtn">Finish</button>
         </div>
 
@@ -586,7 +889,7 @@
     </section>
 
     <footer class="footer">
-      Reptilift v9.62 — rough cut
+      Reptilift v9.67 — rough cut
       <button id="replayIntro" class="replay">↻ replay intro</button>
     </footer>
 
@@ -596,11 +899,11 @@
          the Home hub. Active-state is handled in switchTab: non-tab panels (incl.
          log + calories-page) simply leave every tab un-highlighted. -->
     <nav class="tabbar" aria-label="Main navigation">
-      <button class="tab active" data-tab="home"><span class="tab-ico">🦎</span><span class="tab-lbl">Menu</span></button>
-      <button class="tab" data-tab="ranks"><span class="tab-ico">🏆</span><span class="tab-lbl">Ranks</span></button>
+      <button class="tab active" data-tab="home"><span class="tab-ico" data-icon="home"></span><span class="tab-lbl">Menu</span></button>
+      <button class="tab" data-tab="ranks"><span class="tab-ico" data-icon="trophy"></span><span class="tab-lbl">Ranks</span></button>
       <button class="tab-fab" id="addFab" type="button" aria-label="Add" aria-haspopup="true" aria-expanded="false"><span class="fab-ico">＋</span></button>
-      <button class="tab" data-tab="quests"><span class="tab-ico">🎯</span><span class="tab-lbl">Quests</span></button>
-      <button class="tab" data-tab="profile-page"><span class="tab-ico">👤</span><span class="tab-lbl">Profile</span></button>
+      <button class="tab" data-tab="quests"><span class="tab-ico" data-icon="target"></span><span class="tab-lbl">Quests</span></button>
+      <button class="tab" data-tab="profile-page"><span class="tab-ico" data-icon="user"></span><span class="tab-lbl">Profile</span></button>
     </nav>
 
     <!-- ADD ACTION SHEET — opened by the central + FAB. Two big choices; backdrop or
@@ -611,8 +914,8 @@
         <div class="addsheet-grip" aria-hidden="true"></div>
         <h3 class="addsheet-title">What are we adding?</h3>
         <div class="addsheet-actions">
-          <button class="addsheet-act" data-addgo="log" type="button"><span class="aa-ico">🏋️</span><span class="aa-lbl">Log a Workout</span></button>
-          <button class="addsheet-act" data-addgo="calories-page" type="button"><span class="aa-ico">🍗</span><span class="aa-lbl">Add Food</span></button>
+          <button class="addsheet-act" data-addgo="log" type="button"><span class="aa-ico" data-icon="barbell"></span><span class="aa-lbl">Log a Workout</span></button>
+          <button class="addsheet-act" data-addgo="calories-page" type="button"><span class="aa-ico" data-icon="utensils"></span><span class="aa-lbl">Add Food</span></button>
         </div>
         <button class="addsheet-cancel" data-addclose type="button">Cancel</button>
       </div>
@@ -650,7 +953,7 @@
         <canvas id="rankCanvas" width="1080" height="1350"></canvas>
       </div>
       <div class="card-actions">
-        <button class="btn" id="cardShareBtn">📤 Share</button>
+        <button class="btn" id="cardShareBtn"><span data-icon="share"></span> Share</button>
         <button class="btn ghost" id="cardClose">Close</button>
       </div>
       <p class="sharehint" id="cardHint">Share to your story or save the image 🦎</p>
@@ -723,7 +1026,7 @@
         <div class="ob-emoji">💪</div>
         <h2 class="ob-title">You're set!</h2>
         <p class="ob-sub">Start a workout, add your lifts, and log a set to earn your first beast rank.</p>
-        <button class="btn ob-cta" id="obFinish" type="button">🏋️ Log my first workout</button>
+        <button class="btn ob-cta" id="obFinish" type="button"><span data-icon="barbell"></span> Log my first workout</button>
       </div>
 
       <!-- progress dots + nav -->

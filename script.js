@@ -1,4 +1,33 @@
-// Reptilift v3.53 — earn your beast rank per exercise from your MMR.
+// Reptilift v3.56 — earn your beast rank per exercise from your MMR.
+// v3.56 adds AI FOOD PHOTO SCANNING to the Apex calorie tracker: a "Snap your
+// food" camera button downscales the photo client-side (~1024px JPEG) and posts
+// it to a new Supabase Edge Function (supabase/functions/food-scan/index.ts) that
+// calls Claude vision with a strict JSON schema and returns name/portion/kcal/
+// macros/confidence. Client shows an acid-pulse scanning state, then an editable
+// confirm card that logs through calAdd (the existing path, photo thumb attached).
+// Requires cloud-sync login (the function verifies the JWT; the Anthropic key is
+// a Supabase secret, never in this file). Fails soft until deployed — see
+// DEPLOY-FOOD-SCAN.md.
+// v3.55 CINEMATIC DARK restyle to match the intro: near-black neutral palette
+// (--bg #0a0b09, cards #12140f, hairline lines), ONE acid-green accent (#b6ff2e)
+// replacing the old mint, gold demoted to Apex/premium surfaces only. Anton (bold
+// condensed) for brand/section titles/hero numbers; Bungee gone. ALL UI-chrome emoji
+// replaced by inline SVG line icons (ICONS map + icon()/applyIcons() at the top of
+// this file); beast/rank emoji, the 🦎 Scales coin, avatars & celebratory copy stay
+// emoji. Home menu is one surface with dividers; rank hero is the glow centerpiece.
+// The intro is also compressed to a ~3s overlapping timeline with realistic ragged
+// claw gashes (jagged glow-edge + dark torn core, generated geometry) and a
+// REALISTIC reptile eye: the lid groups form an almond aperture (closed = slit),
+// fibrous generated iris striations, luminous pupil ring, soft blurred slit pupil,
+// wet glint, vein cracks and rim-lit scale polygons; one unified glow hue. A
+// screenshot-driven visual QA pass then polished every beat: darker gash cores with
+// edge-only glow, gradient-lit lids with a beaded ridge (no floating polygons),
+// electric forked lightning hugging the title, retimed beats (gashes fully out
+// BEFORE the lids open; eye exits to pure black for the lockup), neutral streak chip.
+// v3.54 rebuilds the startup splash as a pure inline-SVG + CSS 7-beat cinematic
+// (claw slashes → eye ignites → eye opens → REPTILIFT over eye → title dominant →
+// lightning → lockup + lens flare, ~3s, tap to skip). The old intro.mp4 <video>
+// is gone (autoplay-blocking + 1.4MB download made it unreliable); no image assets.
 // v3.53 adds macros (protein/carbs/fat) to the Apex calorie tracker — per-macro goals,
 // FOOD_DB + OpenFoodFacts macro data, manual macro fields, and P/C/F totals/bars —
 // plus more Apex perks: 2× Scales from workouts & quest claims and three Apex-exclusive
@@ -105,6 +134,51 @@
 // OVERALL MMR is the simple AVERAGE of every ranked lift's best per-exercise MMR
 // (each logged exercise counts equally; unlogged lifts don't count).
 
+// ===== inline SVG icon system =====
+// Clean stroke-based line icons (24×24, currentColor) replace every emoji that was
+// UI CHROME (buttons, tabs, section headers, badges). Animal/beast emoji, the 🦎
+// Scales coin, avatars and celebratory copy are CONTENT and stay emoji. Two ways in:
+//   • static HTML: `<span class="ico" data-icon="name"></span>` — filled once by
+//     applyIcons() right below (script runs at end of <body>, so the DOM exists).
+//   • JS-rendered HTML: template strings call icon("name") directly (function
+//     declarations hoist, so this is safe from anywhere, any load order).
+const ICONS = {
+  home:      '<path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 22V12h6v10"/>',
+  trophy:    '<path d="M8 21h8"/><path d="M12 17v4"/><path d="M7 4h10v6a5 5 0 0 1-10 0V4z"/><path d="M7 6H4a1 1 0 0 0-1 1 4 4 0 0 0 4 4"/><path d="M17 6h3a1 1 0 0 1 1 1 4 4 0 0 1-4 4"/>',
+  target:    '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/>',
+  user:      '<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
+  users:     '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
+  cart:      '<circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/>',
+  star:      '<path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>',
+  crown:     '<path d="M3 17l-1.5-9L8 12l4-8 4 8 6.5-4L21 17H3z"/><path d="M4 21h16"/>',
+  mail:      '<rect x="2" y="4" width="20" height="16" rx="2"/><path d="M22 6l-10 7L2 6"/>',
+  cloud:     '<path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/>',
+  barbell:   '<path d="M6.5 6.5v11"/><path d="M17.5 6.5v11"/><path d="M3 9.5v5"/><path d="M21 9.5v5"/><path d="M6.5 12h11"/>',
+  zap:       '<path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>',
+  flame:     '<path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.07-2.14-.22-4.05 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.15.43-2.29 1-3a2.5 2.5 0 0 0 2.5 2.5z"/>',
+  chart:     '<path d="M23 6l-9.5 9.5-5-5L1 18"/><path d="M17 6h6v6"/>',
+  camera:    '<path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/>',
+  share:     '<path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><path d="M16 6l-4-4-4 4"/><path d="M12 2v13"/>',
+  clipboard: '<path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/>',
+  timer:     '<path d="M10 2h4"/><path d="M12 14l3-3"/><circle cx="12" cy="14" r="8"/>',
+  sound:     '<path d="M11 5L6 9H2v6h4l5 4V5z"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>',
+  clock:     '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+  award:     '<circle cx="12" cy="8" r="6"/><path d="M8.8 13l-1.3 8 4.5-2.7L16.5 21l-1.3-8"/>',
+  swords:    '<path d="M3 3l14 14"/><path d="M14.5 3H21v6.5"/><path d="M21 3L7 17"/><path d="M5 15l4 4"/><path d="M4 20l1-1"/><path d="M19 15l-4 4"/><path d="M20 20l-1-1"/>',
+  utensils:  '<path d="M3 2v6a3 3 0 0 0 6 0V2"/><path d="M6 2v20"/><path d="M20 15V2a5 5 0 0 0-4 5v6h4"/><path d="M20 15v7"/>',
+  play:      '<path d="M6 4l14 8-14 8V4z"/>',
+};
+function icon(name, cls) {
+  const d = ICONS[name] || ICONS.star;
+  return `<svg class="ico${cls ? " " + cls : ""}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
+}
+// fill every static `<span data-icon="name">` in index.html (runs once, right now)
+(function applyIcons() {
+  try {
+    document.querySelectorAll("[data-icon]").forEach((el) => { el.innerHTML = icon(el.dataset.icon); });
+  } catch (e) {}
+})();
+
 // ===== cloud-sync hook: localStorage.setItem auto-push override =====
 // Installed FIRST so every existing/future write to a "reptilift_" key can
 // trigger a debounced cloud push — without us having to edit every save site.
@@ -114,7 +188,8 @@
 const SYNC_KEYS = [
   "reptilift_achievements", "reptilift_active", "reptilift_bests", "reptilift_bwlog",
   "reptilift_calories", "reptilift_customex", "reptilift_inventory", "reptilift_lastsets",
-  "reptilift_profile", "reptilift_quests", "reptilift_routines", "reptilift_sets",
+  "reptilift_measurements", "reptilift_photos", "reptilift_profile", "reptilift_program",
+  "reptilift_quests", "reptilift_routines", "reptilift_sets",
   "reptilift_sound", "reptilift_streak", "reptilift_wallet", "reptilift_workouts",
 ];
 let cloudUser = null;        // set to the Supabase user once logged in
@@ -341,6 +416,128 @@ const BASE_EXERCISES = [
   { id: "snatch",       name: "Snatch",                  type: "load", group: "Olympic" },
   // Other
   { id: "machine",      name: "Machine / Other",         type: "load", group: "Other" },
+];
+
+// ===== workout programs (guided plans) =====
+// Plain const (load-order safe — never read at module top, only from render/handlers).
+// Each program: { id, name, desc, daysPerWeek, days:[{ name, exercises:[{ exId, sets, reps }] }] }.
+// exIds reference BASE_EXERCISES ids above; the "today's workout" path feeds a day's
+// exercises into the existing startWorkout(routine) so prefill/celebrations all reuse.
+const PROGRAMS = [
+  {
+    id: "fullbody_beginner",
+    name: "Full Body (Beginner)",
+    desc: "3 days a week, whole body each session. The simplest way to get strong fast.",
+    daysPerWeek: 3,
+    days: [
+      { name: "Day A", exercises: [
+        { exId: "squat", sets: 3, reps: 5 },
+        { exId: "bench", sets: 3, reps: 5 },
+        { exId: "row", sets: 3, reps: 8 },
+        { exId: "ohp", sets: 3, reps: 8 },
+        { exId: "curl", sets: 2, reps: 12 },
+      ] },
+      { name: "Day B", exercises: [
+        { exId: "deadlift", sets: 3, reps: 5 },
+        { exId: "ohp", sets: 3, reps: 5 },
+        { exId: "latpulldown", sets: 3, reps: 10 },
+        { exId: "legpress", sets: 3, reps: 10 },
+        { exId: "pushdown", sets: 2, reps: 12 },
+      ] },
+      { name: "Day C", exercises: [
+        { exId: "frontsquat", sets: 3, reps: 6 },
+        { exId: "inclinebench", sets: 3, reps: 8 },
+        { exId: "cablerow", sets: 3, reps: 10 },
+        { exId: "lateralraise", sets: 3, reps: 15 },
+        { exId: "hangingleg", sets: 3, reps: 12 },
+      ] },
+    ],
+  },
+  {
+    id: "ppl",
+    name: "Push / Pull / Legs",
+    desc: "A 3-day cycle hitting push, pull, then legs. Run it 3–6 days a week.",
+    daysPerWeek: 6,
+    days: [
+      { name: "Push", exercises: [
+        { exId: "bench", sets: 4, reps: 8 },
+        { exId: "ohp", sets: 3, reps: 10 },
+        { exId: "inclinedb", sets: 3, reps: 10 },
+        { exId: "lateralraise", sets: 3, reps: 15 },
+        { exId: "pushdown", sets: 3, reps: 12 },
+        { exId: "overheadtri", sets: 3, reps: 12 },
+      ] },
+      { name: "Pull", exercises: [
+        { exId: "deadlift", sets: 3, reps: 5 },
+        { exId: "pullup", sets: 3, reps: 8 },
+        { exId: "row", sets: 4, reps: 8 },
+        { exId: "facepull", sets: 3, reps: 15 },
+        { exId: "curl", sets: 3, reps: 12 },
+        { exId: "hammercurl", sets: 3, reps: 12 },
+      ] },
+      { name: "Legs", exercises: [
+        { exId: "squat", sets: 4, reps: 6 },
+        { exId: "rdl", sets: 3, reps: 8 },
+        { exId: "legpress", sets: 3, reps: 12 },
+        { exId: "legcurl", sets: 3, reps: 12 },
+        { exId: "calfraise", sets: 4, reps: 15 },
+      ] },
+    ],
+  },
+  {
+    id: "upperlower",
+    name: "Upper / Lower",
+    desc: "A 4-day split alternating upper- and lower-body sessions twice a week.",
+    daysPerWeek: 4,
+    days: [
+      { name: "Upper A", exercises: [
+        { exId: "bench", sets: 4, reps: 6 },
+        { exId: "row", sets: 4, reps: 8 },
+        { exId: "ohp", sets: 3, reps: 10 },
+        { exId: "latpulldown", sets: 3, reps: 10 },
+        { exId: "curl", sets: 3, reps: 12 },
+        { exId: "pushdown", sets: 3, reps: 12 },
+      ] },
+      { name: "Lower A", exercises: [
+        { exId: "squat", sets: 4, reps: 6 },
+        { exId: "rdl", sets: 3, reps: 8 },
+        { exId: "legext", sets: 3, reps: 12 },
+        { exId: "legcurl", sets: 3, reps: 12 },
+        { exId: "calfraise", sets: 4, reps: 15 },
+      ] },
+      { name: "Upper B", exercises: [
+        { exId: "inclinebench", sets: 4, reps: 8 },
+        { exId: "cablerow", sets: 4, reps: 10 },
+        { exId: "dbshoulder", sets: 3, reps: 10 },
+        { exId: "pullup", sets: 3, reps: 8 },
+        { exId: "hammercurl", sets: 3, reps: 12 },
+        { exId: "skullcrusher", sets: 3, reps: 12 },
+      ] },
+      { name: "Lower B", exercises: [
+        { exId: "deadlift", sets: 3, reps: 5 },
+        { exId: "frontsquat", sets: 3, reps: 8 },
+        { exId: "legpress", sets: 3, reps: 12 },
+        { exId: "hipthrust", sets: 3, reps: 10 },
+        { exId: "calfraise", sets: 4, reps: 15 },
+      ] },
+    ],
+  },
+];
+const programById = (id) => PROGRAMS.find((p) => p.id === id);
+
+// ===== body-measurement parts (length, canonical INCHES) =====
+// Plain const — used only from render/handlers (load-order safe).
+const MEASURE_PARTS = [
+  { id: "neck",      name: "Neck" },
+  { id: "shoulders", name: "Shoulders" },
+  { id: "chest",     name: "Chest" },
+  { id: "waist",     name: "Waist" },
+  { id: "hips",      name: "Hips" },
+  { id: "armL",      name: "Left Arm" },
+  { id: "armR",      name: "Right Arm" },
+  { id: "thighL",    name: "Left Thigh" },
+  { id: "thighR",    name: "Right Thigh" },
+  { id: "calf",      name: "Calf" },
 ];
 
 // ===== state =====
@@ -747,6 +944,7 @@ function switchTab(name) {
   if (name === "plates-page") { try { renderPlates(); } catch (e) {} }
   if (name === "premium-page") { try { renderPremium(); } catch (e) {} }
   if (name === "calories-page") { try { renderCalories(); } catch (e) {} }
+  if (name === "programs") { try { renderPrograms(); } catch (e) {} }
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
@@ -1057,7 +1255,7 @@ function renderCalories() {
         <div class="lock-emoji">🔒</div>
         <div class="lock-title">Calorie tracking is an Apex feature</div>
         <p class="lock-sub">Set a daily goal and log your intake on-brand. Unlock it with Apex.</p>
-        <button class="btn premium-sub" data-gopremium type="button">👑 Go Apex</button>
+        <button class="btn premium-sub" data-gopremium type="button">${icon("crown")} Go Apex</button>
       </div>`;
     wireGoPremium(box);
     return;
@@ -1134,6 +1332,11 @@ function renderCalories() {
       </div>
     </div>
     <h3 class="sub">Add entry</h3>
+    <div class="cal-scan">
+      <button class="cal-scan-btn" id="calScanBtn" type="button">${icon("camera")} Snap your food <em>AI</em></button>
+      <input type="file" id="calScanInput" accept="image/*" capture="environment" hidden />
+      <div class="cal-scan-box" id="calScanBox"></div>
+    </div>
     <div class="cal-search">
       <input type="text" id="calSearch" placeholder="🔎 Search foods (e.g. chicken, rice)…" autocomplete="off" />
       <div class="cal-results" id="calResults"></div>
@@ -1149,7 +1352,7 @@ function renderCalories() {
       <label class="cal-mfield">F<input type="number" id="calF" placeholder="0" min="0" inputmode="numeric" /></label>
     </div>
     <div class="cal-addrow2">
-      <button class="cal-photo-btn" id="calPhotoBtn" type="button">📷 Photo</button>
+      <button class="cal-photo-btn" id="calPhotoBtn" type="button">${icon("camera")} Photo</button>
       <input type="file" id="calPhotoInput" accept="image/*" capture="environment" hidden />
       <span class="cal-photo-status" id="calPhotoStatus"></span>
       <button class="btn" id="calAddBtn" type="button">Add</button>
@@ -1212,6 +1415,7 @@ function renderCalories() {
     b.addEventListener("click", () => calDelete(+b.dataset.del)));
   box.querySelectorAll(".cal-e-thumb").forEach((img) =>
     img.addEventListener("click", () => calPhotoView(img.getAttribute("src"))));
+  wireCalScan();
   // ---- food search (built-in FOOD_DB instant + OpenFoodFacts online, debounced) ----
   const searchI = document.getElementById("calSearch");
   const resultsBox = document.getElementById("calResults");
@@ -1303,6 +1507,123 @@ function calPhotoView(src) {
     if (img) img.src = src;
     m.classList.add("open");
   } catch (e) { /* never throw */ }
+}
+
+// ===== AI food photo scan (Apex calorie tracker) =====
+// "Snap your food" → downscale client-side → POST base64 to the food-scan Supabase
+// Edge Function (holds the Anthropic key as a secret — NEVER shipped in this file)
+// → Claude vision returns { is_food, name, portion, calories, protein_g, carbs_g,
+// fat_g, confidence } → editable confirm card → "Log it" goes through calAdd (the
+// existing logging path). Requires a cloud-sync login: the function checks the JWT
+// so randoms can't burn the API budget. All function declarations (hoisted), no
+// top-level execution — load-order safe. Fails soft everywhere: no cloud config or
+// an undeployed function shows a friendly note, never an error dump.
+function wireCalScan() {
+  const btn = document.getElementById("calScanBtn");
+  const input = document.getElementById("calScanInput");
+  const boxEl = document.getElementById("calScanBox");
+  if (!btn || !input || !boxEl) return;
+  btn.addEventListener("click", () => {
+    if (typeof CLOUD_CONFIGURED === "undefined" || !CLOUD_CONFIGURED || !supa) {
+      boxEl.innerHTML = `<div class="cal-scan-note">Food scanning isn't set up yet — it needs cloud sync to be configured first. 🦎</div>`;
+      return;
+    }
+    if (!cloudUser) {
+      boxEl.innerHTML = `<div class="cal-scan-note">Sign in to scan food — it keeps the AI free for real lifters.
+        <button class="btn ghost cal-scan-signin" type="button">Sign in</button></div>`;
+      const si = boxEl.querySelector(".cal-scan-signin");
+      if (si) si.addEventListener("click", () => { try { showAuthGate(); } catch (e) {} });
+      return;
+    }
+    input.click();
+  });
+  input.addEventListener("change", () => {
+    const f = input.files && input.files[0];
+    input.value = "";                    // same photo can be re-picked after cancel
+    if (f) calScanRun(f, boxEl);
+  });
+}
+async function calScanRun(file, boxEl) {
+  boxEl.innerHTML = `<div class="cal-scan-state"><span class="cal-scan-pulse"></span>Identifying your food…</div>`;
+  const fail = (msg) => { if (boxEl.isConnected) boxEl.innerHTML = `<div class="cal-scan-note">${msg}</div>`; };
+  try {
+    // downscale: ~1024px long edge keeps upload + vision tokens cheap; a tiny
+    // square thumb rides along to attach to the logged entry (existing photo path).
+    const dataUrl = await downscalePhoto(file, 1024, 0.8);
+    const thumb = await downscaleImage(file, 200, 0.6).catch(() => null);
+    const base64 = String(dataUrl).split(",")[1] || "";
+    if (!base64) return fail("Couldn't read that photo — try another one.");
+    const sess = await supa.auth.getSession();
+    const token = sess && sess.data && sess.data.session && sess.data.session.access_token;
+    if (!token) return fail("Your session expired — sign in again to scan.");
+    const ctrl = new AbortController();
+    const to = setTimeout(() => { try { ctrl.abort(); } catch (e) {} }, 30000);
+    let r;
+    try {
+      r = await fetch(`${window.SUPA_URL}/functions/v1/food-scan`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`,
+          "apikey": window.SUPA_ANON,
+        },
+        body: JSON.stringify({ image: base64, media_type: "image/jpeg" }),
+        signal: ctrl.signal,
+      });
+    } catch (e) {
+      clearTimeout(to);
+      return fail(navigator.onLine === false
+        ? "You're offline — food scanning needs a connection."
+        : "Couldn't reach the scanner — check your connection and try again.");
+    }
+    clearTimeout(to);
+    if (r.status === 401) return fail("Your session expired — sign in again to scan.");
+    if (r.status === 404) return fail("Food scanning isn't set up yet — the scan function hasn't been deployed. 🦎");
+    let data = null;
+    try { data = await r.json(); } catch (e) {}
+    if (!r.ok) return fail((data && data.error) || "Food scanning hit a snag — try again in a moment.");
+    if (!data || typeof data !== "object") return fail("Got a weird answer from the scanner — try again.");
+    if (!data.is_food) return fail("That doesn't look like food 🦎 — try a clearer shot of your plate.");
+    calScanConfirm(boxEl, data, thumb);
+  } catch (e) {
+    fail("Something went wrong scanning that photo — try again.");
+  }
+}
+function calScanConfirm(boxEl, res, thumb) {
+  if (!boxEl.isConnected) return;
+  const num = (v) => Math.max(0, Math.round(Number(v) || 0));
+  const name = String(res.name || "Meal").slice(0, 40);
+  const portion = String(res.portion || "").slice(0, 60);
+  const conf = ["low", "medium", "high"].includes(res.confidence) ? res.confidence : "medium";
+  boxEl.innerHTML = `
+    <div class="cal-scan-card">
+      <div class="cal-scan-head">
+        ${thumb ? `<img src="${thumb}" alt="your food" />` : ""}
+        <div class="cal-scan-id">
+          <b>${escapeHtml(name)}</b>
+          ${portion ? `<span>${escapeHtml(portion)}</span>` : ""}
+        </div>
+        <span class="cal-conf cal-conf-${conf}">${conf}</span>
+      </div>
+      <div class="cal-scan-fields">
+        <label class="cal-mfield">kcal<input type="number" id="calScanK" min="0" inputmode="numeric" value="${num(res.calories)}" /></label>
+        <label class="cal-mfield">P<input type="number" id="calScanP" min="0" inputmode="numeric" value="${num(res.protein_g)}" /></label>
+        <label class="cal-mfield">C<input type="number" id="calScanC" min="0" inputmode="numeric" value="${num(res.carbs_g)}" /></label>
+        <label class="cal-mfield">F<input type="number" id="calScanF" min="0" inputmode="numeric" value="${num(res.fat_g)}" /></label>
+      </div>
+      <div class="cal-scan-actions">
+        <button class="btn" id="calScanLog" type="button">Log it</button>
+        <button class="btn ghost" id="calScanCancel" type="button">Cancel</button>
+      </div>
+    </div>`;
+  const val = (id) => { const el = document.getElementById(id); return el ? el.value : 0; };
+  const logBtn = document.getElementById("calScanLog");
+  if (logBtn) logBtn.addEventListener("click", () => {
+    // reuse the one logging path — calAdd saves + re-renders (clearing this card).
+    calAdd(name, val("calScanK"), thumb || null, { p: val("calScanP"), c: val("calScanC"), f: val("calScanF") });
+  });
+  const cancelBtn = document.getElementById("calScanCancel");
+  if (cancelBtn) cancelBtn.addEventListener("click", () => { boxEl.innerHTML = ""; });
 }
 
 // ===== plate calculator =====
@@ -1572,6 +1893,32 @@ let workout = safeParse("reptilift_active", null);
 let workouts = safeParse("reptilift_workouts", []);
 let lastSets = safeParse("reptilift_lastsets", {}); // exId -> [{lbs,reps,added}] from last session (PREV column)
 let routines = safeParse("reptilift_routines", []); // [{id,name,exercises:[{exId,sets,reps}]}]
+// ===== workout programs (guided multi-day plans) =====
+// activeProgram is the user's currently-running program: { id, startedAt, dayIndex }
+// (dayIndex = which day in the program's cycle is NEXT up). null = no program active.
+// Stored in reptilift_program (in SYNC_KEYS). Plain guard only here — load-order safe.
+let activeProgram = safeParse("reptilift_program", null);
+if (activeProgram && typeof activeProgram === "object") {
+  if (typeof activeProgram.id !== "string") activeProgram = null;
+  else {
+    if (typeof activeProgram.startedAt !== "number") activeProgram.startedAt = Date.now();
+    if (typeof activeProgram.dayIndex !== "number" || activeProgram.dayIndex < 0) activeProgram.dayIndex = 0;
+  }
+} else activeProgram = null;
+const saveProgram = () => localStorage.setItem("reptilift_program", JSON.stringify(activeProgram));
+// ===== body measurements (dated, per body part) =====
+// measurements: { "<part>": [{ d:"YYYY-MM-DD", v:<number in INCHES> }] }. Stored
+// canonically in INCHES (display flips to cm when units==="kg", matching the app's
+// unit toggle spirit). Plain guard only here — load-order safe.
+let measurements = safeParse("reptilift_measurements", {});
+if (!measurements || typeof measurements !== "object" || Array.isArray(measurements)) measurements = {};
+const saveMeasurements = () => localStorage.setItem("reptilift_measurements", JSON.stringify(measurements));
+// ===== progress photos (dated data URLs) =====
+// photos: [{ d:"YYYY-MM-DD", img:"<dataURL>", note? }], newest-first kept on render.
+// Plain guard only here — load-order safe.
+let photos = safeParse("reptilift_photos", []);
+if (!Array.isArray(photos)) photos = [];
+const savePhotos = () => localStorage.setItem("reptilift_photos", JSON.stringify(photos));
 const saveWorkout = () => {
   localStorage.setItem("reptilift_active", JSON.stringify(workout));
   localStorage.setItem("reptilift_workouts", JSON.stringify(workouts));
@@ -1719,6 +2066,9 @@ function finishWorkout() {
     // economy: this counts as a finished workout for quests, and earns Scales.
     trackDaily("workouts"); trackLifetime("workouts");
     awardWorkoutCoins(review);   // sets review.coins (idempotent); used by showReview
+    // if this session came from the active program, advance to the next day in the
+    // cycle (only when real sets were logged — a discarded session won't skip a day).
+    advanceProgramAfterFinish(workout);
   }
   // build the queue of rank-up celebrations to play one by one BEFORE the review.
   // Dedupe per exercise: one celebration from the lift's rank at session start
@@ -1903,7 +2253,7 @@ function showReview(r, silent) {
     }).join("") + `</div>`;
 
   // coins earned this session
-  const coinHtml = r.coins ? `<div class="rv-coins">+${r.coins.toLocaleString()} ${COIN} ${CUR} earned${r.boosted ? ` <span class="rv-boost">⚡ 2× boost</span>` : ""}${r.apex ? ` <span class="rv-boost rv-apex">👑 2× Apex</span>` : ""}</div>` : "";
+  const coinHtml = r.coins ? `<div class="rv-coins">+${r.coins.toLocaleString()} ${COIN} ${CUR} earned${r.boosted ? ` <span class="rv-boost">${icon("zap")} 2× boost</span>` : ""}${r.apex ? ` <span class="rv-boost rv-apex">${icon("crown")} 2× Apex</span>` : ""}</div>` : "";
   body.innerHTML = `
     <div class="rv-emoji" style="text-shadow:0 0 26px ${accent}">${tb.emoji}</div>
     <h2 class="rv-title">Session complete</h2>
@@ -2111,7 +2461,7 @@ function renderWorkout() {
       </div>
       <div class="exo-body">
         <div class="rest-row">
-          <span class="rest-ic">⏱</span><span>Rest Timer</span>
+          <span class="rest-ic">${icon("timer")}</span><span>Rest Timer</span>
           <b class="rest-val" data-restedit="${i}">${clock(exo.rest)} ✎</b>
           <button class="rest-sw ${exo.restOn ? "on" : ""}" data-resttoggle="${i}"></button>
         </div>
@@ -2205,7 +2555,7 @@ function renderYourRanks() {
       } else if (!hasMmr) {
         next = `<div class="rankrow-next">Set bodyweight to rank up</div>`;
       } else {
-        next = `<div class="rankrow-next">🏆 Max tier reached</div>`;
+        next = `<div class="rankrow-next">${icon("trophy")} Max tier reached</div>`;
       }
       const row = document.createElement("div");
       row.className = "rankrow";
@@ -2285,6 +2635,143 @@ function deleteRoutine(id) {
   if (!r || !confirm(`Delete routine "${r.name}"?`)) return;
   routines = routines.filter((x) => x.id !== id);
   saveRoutines(); renderRoutines();
+}
+
+// ===== programs: state + flow =====
+// Resolve the active program object (or null if none / stale). Guarded.
+function currentProgram() {
+  if (!activeProgram || !activeProgram.id) return null;
+  return programById(activeProgram.id) || null;
+}
+// The program day that's next up, given activeProgram.dayIndex (wrapped). null-safe.
+function currentProgramDay() {
+  const p = currentProgram();
+  if (!p || !Array.isArray(p.days) || !p.days.length) return null;
+  const i = ((activeProgram.dayIndex % p.days.length) + p.days.length) % p.days.length;
+  return { day: p.days[i], index: i, count: p.days.length };
+}
+// Convert a program day into the routine shape startWorkout() expects, dropping any
+// exercise whose exId is no longer in the catalog (tolerant).
+function programDayToRoutine(prog, day) {
+  return {
+    name: `${prog.name} · ${day.name}`,
+    exercises: (day.exercises || [])
+      .filter((e) => exById(e.exId))
+      .map((e) => ({ exId: e.exId, sets: e.sets, reps: e.reps })),
+  };
+}
+// Begin a program (only one active at a time). Resets to day 0.
+function startProgram(id) {
+  const p = programById(id);
+  if (!p) return;
+  if (activeProgram && activeProgram.id && activeProgram.id !== id &&
+      !confirm(`Switch from your current program to "${p.name}"? Progress resets to day 1.`)) return;
+  activeProgram = { id: p.id, startedAt: Date.now(), dayIndex: 0 };
+  saveProgram();
+  try { if (soundOn) blip(); } catch (e) {}
+  try { renderPrograms(); } catch (e) {}
+  try { renderHome(); } catch (e) {}
+}
+// Quit the active program.
+function quitProgram() {
+  if (!activeProgram) return;
+  const p = currentProgram();
+  if (!confirm(`Quit ${p ? p.name : "your program"}? You can start it again any time.`)) return;
+  activeProgram = null;
+  saveProgram();
+  try { renderPrograms(); } catch (e) {}
+  try { renderHome(); } catch (e) {}
+}
+// Start TODAY'S program workout, pre-filled with the next day's exercises. Reuses the
+// existing routine-start path. activeProgram.pendingAdvance flags that finishing this
+// session should advance the cycle (set so a discarded/empty session doesn't skip a day
+// — advance only happens in finishWorkout when sets were actually logged).
+function startTodaysProgramWorkout() {
+  const info = currentProgramDay();
+  const prog = currentProgram();
+  if (!info || !prog) return;
+  if (workout && !confirm("A workout is already in progress. Discard it and start today's program workout?")) return;
+  const r = programDayToRoutine(prog, info.day);
+  if (!r.exercises.length) { alert("This day's exercises aren't available."); return; }
+  startWorkout(r);
+  if (workout) workout.fromProgram = prog.id;   // tag so finish advances the cycle
+  saveWorkout();
+  switchTab("log");
+}
+// Called from finishWorkout when a logged session came from a program: advance the
+// cycle by one day (wrap). Guarded; no-op if the program changed/quit mid-session.
+function advanceProgramAfterFinish(finishedW) {
+  try {
+    if (!finishedW || !finishedW.fromProgram) return;
+    if (!activeProgram || activeProgram.id !== finishedW.fromProgram) return;
+    const p = currentProgram();
+    if (!p || !Array.isArray(p.days) || !p.days.length) return;
+    activeProgram.dayIndex = (activeProgram.dayIndex + 1) % p.days.length;
+    saveProgram();
+  } catch (e) {}
+}
+
+// summary line for a program day, e.g. "Squat 3×5 · Bench 3×5 · …"
+function programDaySummary(day) {
+  return (day.exercises || []).map((e) => {
+    const ex = exById(e.exId);
+    const nm = ex ? ex.name : "(removed)";
+    return `${nm} ${e.sets}×${e.reps}`;
+  }).join(" · ");
+}
+
+// ---- Programs page ----
+function renderPrograms() {
+  const box = document.getElementById("programList");
+  if (!box) return;
+  box.innerHTML = "";
+  const active = currentProgram();
+  // active-program banner with progress + quit, when one is running.
+  const banner = document.getElementById("programActive");
+  if (banner) {
+    if (active) {
+      const info = currentProgramDay();
+      const dayName = info ? info.day.name : "";
+      const pos = info ? `Day ${info.index + 1} of ${info.count} · ${dayName}` : "";
+      banner.innerHTML = `
+        <div class="prog-active-head">
+          <span class="prog-active-tag">ACTIVE PROGRAM</span>
+          <button class="btn ghost small" id="programQuitBtn" type="button">Quit</button>
+        </div>
+        <div class="prog-active-name">${escapeHtml(active.name)}</div>
+        <div class="prog-active-pos">${escapeHtml(pos)}</div>
+        <button class="btn" id="programTodayBtn" type="button">▶ Start ${escapeHtml(dayName)} workout</button>`;
+      banner.classList.remove("hidden");
+      const tB = document.getElementById("programTodayBtn");
+      if (tB) tB.addEventListener("click", startTodaysProgramWorkout);
+      const qB = document.getElementById("programQuitBtn");
+      if (qB) qB.addEventListener("click", quitProgram);
+    } else {
+      banner.innerHTML = "";
+      banner.classList.add("hidden");
+    }
+  }
+  // catalog of all programs (Start / Switch / current).
+  PROGRAMS.forEach((p) => {
+    const isActive = active && active.id === p.id;
+    const card = document.createElement("div");
+    card.className = "program-card" + (isActive ? " program-card-active" : "");
+    const dayList = (p.days || []).map((d) =>
+      `<div class="program-day"><b>${escapeHtml(d.name)}</b><span>${escapeHtml(programDaySummary(d))}</span></div>`).join("");
+    card.innerHTML = `
+      <div class="program-head">
+        <span class="program-name">${escapeHtml(p.name)}</span>
+        <span class="program-meta">${p.days.length}-day cycle · ${p.daysPerWeek}×/wk</span>
+      </div>
+      <div class="program-desc">${escapeHtml(p.desc)}</div>
+      <div class="program-days">${dayList}</div>
+      <button class="btn ${isActive ? "ghost" : ""} program-start" data-prog="${p.id}" type="button">
+        ${isActive ? "✓ Current program" : (active ? "Switch to this" : "▶ Start program")}
+      </button>`;
+    box.appendChild(card);
+  });
+  box.querySelectorAll("[data-prog]").forEach((b) =>
+    b.addEventListener("click", () => { if (!(active && active.id === b.dataset.prog)) startProgram(b.dataset.prog); }));
 }
 
 // ---- routine build/edit sheet ----
@@ -2371,16 +2858,16 @@ routineEditor.addEventListener("click", (e) => { if (e.target === routineEditor)
 const MILESTONE_BEAST = "hypertrophy";   // "Reach Wired Wolf overall" target tier
 const QUESTS = {
   daily: [
-    { id: "d_workout", name: "Complete a workout today",     icon: "🏋️", goal: 1,  reward: 20, prog: (d) => d.workouts || 0 },
-    { id: "d_sets",    name: "Log 15 sets today",            icon: "📋", goal: 15, reward: 25, prog: (d) => d.sets || 0 },
-    { id: "d_pr",      name: "Set a new MMR PR today",        icon: "📈", goal: 1,  reward: 30, prog: (d) => d.prs || 0 },
+    { id: "d_workout", name: "Complete a workout today",     icon: icon("barbell"), goal: 1,  reward: 20, prog: (d) => d.workouts || 0 },
+    { id: "d_sets",    name: "Log 15 sets today",            icon: icon("clipboard"), goal: 15, reward: 25, prog: (d) => d.sets || 0 },
+    { id: "d_pr",      name: "Set a new MMR PR today",        icon: icon("chart"), goal: 1,  reward: 30, prog: (d) => d.prs || 0 },
   ],
   milestone: [
     { id: "m_first",   name: "Finish your first workout",     icon: "🥚", goal: 1,   reward: 50,  prog: (l) => l.workouts || 0 },
     { id: "m_sets100", name: "Log 100 total sets",            icon: "💯", goal: 100, reward: 100, prog: (l) => l.sets || 0 },
     { id: "m_rankups", name: "Rank up 10 times",              icon: "⬆️", goal: 10,  reward: 120, prog: (l) => l.rankups || 0 },
-    { id: "m_streak7", name: "Hit a 7-day streak",            icon: "🔥", goal: 7,   reward: 150, prog: () => computeStreak() },
-    { id: "m_beast",   name: `Reach ${byId(MILESTONE_BEAST).emoji} ${byId(MILESTONE_BEAST).name} overall`, icon: "👑", goal: 1, reward: 200,
+    { id: "m_streak7", name: "Hit a 7-day streak",            icon: icon("flame"), goal: 7,   reward: 150, prog: () => computeStreak() },
+    { id: "m_beast",   name: `Reach ${byId(MILESTONE_BEAST).emoji} ${byId(MILESTONE_BEAST).name} overall`, icon: icon("crown"), goal: 1, reward: 200,
       prog: () => { const ob = overallBeast(); return ob && tierOf(ob.id) >= tierOf(MILESTONE_BEAST) ? 1 : 0; } },
   ],
 };
@@ -2663,10 +3150,10 @@ function renderCosmeticShop() {
         // locked Go Apex CTA and can't buy or equip it.
         if (isPremium()) {
           btn = equipped ? `<span class="cos-eq">✓ Equipped</span>` : `<button class="btn ghost cos-act" data-cos-equip="${c.id}">Equip</button>`;
-          tag = `<span class="cos-apextag">👑 Apex</span>`;
+          tag = `<span class="cos-apextag">${icon("crown")} Apex</span>`;
         } else {
-          btn = `<button class="btn cos-act cos-apexcta" data-gopremium type="button">👑 Go Apex</button>`;
-          tag = `<span class="cos-apextag locked">👑 Apex only</span>`;
+          btn = `<button class="btn cos-act cos-apexcta" data-gopremium type="button">${icon("crown")} Go Apex</button>`;
+          tag = `<span class="cos-apextag locked">${icon("crown")} Apex only</span>`;
         }
       } else if (owned) {
         btn = equipped ? `<span class="cos-eq">✓ Equipped</span>` : `<button class="btn ghost cos-act" data-cos-equip="${c.id}">Equip</button>`;
@@ -3091,9 +3578,9 @@ function showNextAchievementToast() {
   const prev = head.from > 0 ? (a.levels[head.from - 1] || null) : null;
   const isFirst = head.from === 0;
   // single-level achievements toast as a plain "unlocked"; tiered show the level jump.
-  const tag = a.single ? "🏅 Achievement unlocked"
-            : isFirst   ? `🏅 ${escapeHtml(a.name)} unlocked`
-            :             `🏅 ${escapeHtml(a.name)} · Lv ${lvl}`;
+  const tag = a.single ? `${icon("award")} Achievement unlocked`
+            : isFirst   ? `${icon("award")} ${escapeHtml(a.name)} unlocked`
+            :             `${icon("award")} ${escapeHtml(a.name)} · Lv ${lvl}`;
   const nameLine = (!a.single && prev)
     ? `${escapeHtml(prev.name)} → ${escapeHtml(cur.name)}`
     : escapeHtml(cur.name);
@@ -3163,7 +3650,7 @@ function achTileHtml(a, ctx) {
       : `<span class="ach-when">🔒 Locked</span>`;
   } else if (v.maxed) {
     footer = `<span class="ach-bar maxed"><i style="width:100%"></i></span>
-      <span class="ach-next">⭐ MAX · ${escapeHtml(cur.name)}</span>`;
+      <span class="ach-next">${icon("star")} MAX · ${escapeHtml(cur.name)}</span>`;
   } else {
     const remaining = Math.max(0, v.next.t - v.value);
     footer = `<span class="ach-bar"><i style="width:${Math.round(v.frac * 100)}%"></i></span>
@@ -3205,7 +3692,7 @@ function renderProfileAchievements() {
   const preview = ranked.slice(0, 5);
   box.innerHTML = `
     <button class="pa-head" data-go="achievements-page" type="button">
-      <span class="pa-title">🏅 Achievements</span>
+      <span class="pa-title">${icon("award")} Achievements</span>
       <span class="pa-count">${lvls} / ${tot} lvls</span>
       <span class="pl-arrow">›</span>
     </button>
@@ -3255,7 +3742,45 @@ function renderHome() {
   const bwLbl = document.getElementById("bwLbl");
   if (bwLbl) bwLbl.firstChild && (bwLbl.childNodes[0].nodeValue = `Your bodyweight (${unitLabel()}) `);
   renderHomeQuests();
+  renderTodayCard();
   refreshAvatars();
+}
+
+// "Today's Workout" card on the home hub. When a program is active it shows the next
+// day's name + exercise list with a one-tap start; otherwise a "Start a program" CTA.
+// Fully guarded; the card element is optional so an older index won't throw.
+function renderTodayCard() {
+  const card = document.getElementById("todayCard");
+  if (!card) return;
+  const prog = currentProgram();
+  const info = currentProgramDay();
+  if (prog && info) {
+    const list = (info.day.exercises || []).map((e) => {
+      const ex = exById(e.exId);
+      return `<li>${escapeHtml(ex ? ex.name : "(removed)")} <span>${e.sets}×${e.reps}</span></li>`;
+    }).join("");
+    card.innerHTML = `
+      <div class="today-head">
+        <span class="today-tag">TODAY'S WORKOUT</span>
+        <span class="today-prog">${escapeHtml(prog.name)} · Day ${info.index + 1}/${info.count}</span>
+      </div>
+      <div class="today-dayname">${escapeHtml(info.day.name)}</div>
+      <ul class="today-exlist">${list}</ul>
+      <button class="btn today-start" id="todayStartBtn" type="button">▶ Start today's workout</button>
+      <button class="today-manage" data-go="programs" type="button">Manage program →</button>`;
+    const b = document.getElementById("todayStartBtn");
+    if (b) b.addEventListener("click", startTodaysProgramWorkout);
+    const m = card.querySelector("[data-go]");
+    if (m) m.addEventListener("click", () => switchTab("programs"));
+  } else {
+    card.innerHTML = `
+      <div class="today-head"><span class="today-tag">GET A PLAN</span></div>
+      <div class="today-dayname">Not sure what to train?</div>
+      <p class="today-cta-sub">Follow a proven program — we'll tell you exactly what to do each day.</p>
+      <button class="btn today-start" data-go="programs" type="button">🗺️ Start a program</button>`;
+    const m = card.querySelector("[data-go]");
+    if (m) m.addEventListener("click", () => switchTab("programs"));
+  }
 }
 
 // ===== profile =====
@@ -3284,8 +3809,8 @@ function refreshAvatars() {
   const goBtn = document.getElementById("goPremiumBtn");
   if (goBtn) {
     goBtn.classList.toggle("owned", isPremium());
-    const ico = goBtn.querySelector("span");
-    if (ico) ico.textContent = isPremium() ? "👑" : "⭐";
+    const ico = goBtn.querySelector(".mb-ico");
+    if (ico) ico.innerHTML = isPremium() ? icon("crown") : icon("star");
   }
 }
 
@@ -3379,7 +3904,7 @@ function renderProfile() {
       ${profile.username
         ? `<button type="button" class="ph-handle" id="phHandle">@${escapeHtml(profile.username)}</button>`
         : (cloudUser ? `<button type="button" class="ph-handle ph-handle-empty" id="phHandle">+ set @handle</button>` : "")}
-      <div class="ph-rank">${rankTxt}${isPremium() ? ` <span class="premium-badge">👑 APEX</span>` : ""}</div>
+      <div class="ph-rank">${rankTxt}${isPremium() ? ` <span class="premium-badge">${icon("crown")} APEX</span>` : ""}</div>
       <div class="ph-mmr"><span>Overall MMR</span><b>${mmr != null ? mmr.toLocaleString() : "—"}</b></div>
       ${profile.bio ? `<div class="ph-bio">${escapeHtml(profile.bio)}</div>` : ""}
       ${ms ? `<div class="ph-member">Member since ${ms}</div>` : ""}`;
@@ -3544,6 +4069,211 @@ function downscaleImage(file, size, quality) {
     };
     img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("img load failed")); };
     img.src = url;
+  });
+}
+
+// Downscale an image File to fit within `maxDim` (preserving aspect ratio) as a JPEG
+// data URL — used for PROGRESS PHOTOS (full-body, so no square crop). Keeps the synced
+// blob reasonable. Consistent with how calorie photos are downscaled.
+function downscalePhoto(file, maxDim, quality) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      try {
+        let w = img.width, h = img.height;
+        const scale = Math.min(1, maxDim / Math.max(w, h));
+        w = Math.max(1, Math.round(w * scale)); h = Math.max(1, Math.round(h * scale));
+        const cv = document.createElement("canvas");
+        cv.width = w; cv.height = h;
+        cv.getContext("2d").drawImage(img, 0, 0, w, h);
+        URL.revokeObjectURL(url);
+        resolve(cv.toDataURL("image/jpeg", quality));
+      } catch (e) { URL.revokeObjectURL(url); reject(e); }
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("img load failed")); };
+    img.src = url;
+  });
+}
+
+// ===== body measurements + progress photos =====
+// length unit follows the app's weight-unit toggle (lb -> inches, kg -> cm). ALL
+// measurements are stored canonically in INCHES; these helpers only affect display +
+// input parsing (mirrors toDisplayWeight/fromInputWeight for weights).
+const CM_PER_IN = 2.54;
+const lenUnit = () => (kgMode() ? "cm" : "in");
+function toDisplayLen(inches) {
+  const n = Number(inches);
+  if (!isFinite(n)) return 0;
+  return kgMode() ? Math.round(n * CM_PER_IN * 10) / 10 : Math.round(n * 10) / 10;
+}
+function fromInputLen(val) {
+  const n = parseFloat(val);
+  if (!isFinite(n)) return 0;
+  return kgMode() ? n / CM_PER_IN : n;
+}
+// record a measurement for a part (value entered in the current display unit, stored
+// in inches). Replaces any existing entry for today; keeps the series date-sorted.
+function logMeasurement(partId, displayVal) {
+  const inches = fromInputLen(displayVal);
+  if (!inches || inches <= 0) return false;
+  if (!Array.isArray(measurements[partId])) measurements[partId] = [];
+  const d = todayStr();
+  const arr = measurements[partId];
+  const i = arr.findIndex((e) => e.d === d);
+  if (i >= 0) arr[i].v = inches; else arr.push({ d, v: inches });
+  arr.sort((a, b) => (a.d < b.d ? -1 : a.d > b.d ? 1 : 0));
+  saveMeasurements();
+  return true;
+}
+// tiny inline-SVG sparkline for a numeric series (values already in display units).
+function sparkline(vals, w, h) {
+  if (!Array.isArray(vals) || vals.length < 2) return "";
+  const min = Math.min(...vals), max = Math.max(...vals);
+  const span = max - min || 1;
+  const pad = 2;
+  const pts = vals.map((v, i) => {
+    const x = pad + (i / (vals.length - 1)) * (w - pad * 2);
+    const y = h - pad - ((v - min) / span) * (h - pad * 2);
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(" ");
+  return `<svg class="spark" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" aria-hidden="true">` +
+    `<polyline points="${pts}" fill="none" stroke="var(--gold,#d9b35a)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+}
+
+function renderMeasurements() {
+  const box = document.getElementById("measureList");
+  if (!box) return;
+  box.innerHTML = "";
+  const u = lenUnit();
+  MEASURE_PARTS.forEach((part) => {
+    const arr = Array.isArray(measurements[part.id]) ? measurements[part.id] : [];
+    const latest = arr.length ? arr[arr.length - 1] : null;
+    const first = arr.length ? arr[0] : null;
+    const prev = arr.length > 1 ? arr[arr.length - 2] : null;
+    let trend = "";
+    if (latest && prev) {
+      const diff = toDisplayLen(latest.v) - toDisplayLen(prev.v);
+      const sign = diff > 0 ? "+" : "";
+      const cls = diff > 0 ? "up" : diff < 0 ? "down" : "flat";
+      trend = `<span class="ms-trend ${cls}">${sign}${(Math.round(diff * 10) / 10)} since last</span>`;
+    } else if (latest && first && first !== latest) {
+      const diff = toDisplayLen(latest.v) - toDisplayLen(first.v);
+      const sign = diff > 0 ? "+" : "";
+      trend = `<span class="ms-trend">${sign}${(Math.round(diff * 10) / 10)} total</span>`;
+    }
+    const vals = arr.map((e) => toDisplayLen(e.v));
+    const spark = sparkline(vals, 64, 22);
+    const row = document.createElement("div");
+    row.className = "ms-row";
+    row.innerHTML = `
+      <div class="ms-main">
+        <span class="ms-name">${escapeHtml(part.name)}</span>
+        <span class="ms-val">${latest ? `${toDisplayLen(latest.v)} <small>${u}</small>` : "<small>not logged</small>"}</span>
+        ${trend}
+      </div>
+      <div class="ms-spark">${spark}</div>
+      <div class="ms-input">
+        <input type="number" inputmode="decimal" step="0.1" min="0" class="ms-field" data-part="${part.id}" placeholder="${u}" />
+        <button class="btn ghost small ms-log" data-part="${part.id}" type="button">Log</button>
+      </div>`;
+    box.appendChild(row);
+  });
+  box.querySelectorAll(".ms-log").forEach((b) => b.addEventListener("click", () => {
+    const id = b.dataset.part;
+    const field = box.querySelector(`.ms-field[data-part="${id}"]`);
+    if (!field) return;
+    if (logMeasurement(id, field.value)) {
+      field.value = "";
+      try { if (soundOn) blip(); } catch (e) {}
+      renderMeasurements();
+    }
+  }));
+  const lbl = document.getElementById("measureUnitLbl");
+  if (lbl) lbl.textContent = `(${u})`;
+}
+
+// ---- progress photos ----
+function renderPhotos() {
+  const gallery = document.getElementById("photoGallery");
+  if (!gallery) return;
+  // sort newest-first for display
+  const ordered = [...photos].sort((a, b) => (a.d < b.d ? 1 : a.d > b.d ? -1 : 0));
+  if (!ordered.length) {
+    gallery.innerHTML = `<p class="empty">No progress photos yet. Snap your first one to track the change. 🦎</p>`;
+  } else {
+    gallery.innerHTML = ordered.map((p) => {
+      const i = photos.indexOf(p);
+      return `<figure class="photo-cell">
+        <img src="${p.img}" alt="progress ${escapeHtml(p.d)}" loading="lazy" />
+        <figcaption>${escapeHtml(prettyDate(p.d))}</figcaption>
+        <button class="photo-del" data-delphoto="${i}" type="button" aria-label="Delete">✕</button>
+      </figure>`;
+    }).join("");
+    gallery.querySelectorAll("[data-delphoto]").forEach((b) => b.addEventListener("click", () => {
+      const i = +b.dataset.delphoto;
+      if (i < 0 || i >= photos.length) return;
+      if (!confirm("Delete this progress photo?")) return;
+      photos.splice(i, 1);
+      savePhotos();
+      renderPhotos();
+    }));
+  }
+  renderPhotoCompare(ordered);
+}
+
+// before/after compare: two <select>s default to earliest (before) vs latest (after).
+function renderPhotoCompare(ordered) {
+  const wrap = document.getElementById("photoCompare");
+  if (!wrap) return;
+  if (!ordered || ordered.length < 2) { wrap.classList.add("hidden"); return; }
+  wrap.classList.remove("hidden");
+  // chronological (oldest first) for the dropdown options
+  const chron = [...ordered].sort((a, b) => (a.d < b.d ? -1 : a.d > b.d ? 1 : 0));
+  const opts = (sel) => chron.map((p) =>
+    `<option value="${escapeHtml(p.d)}" ${p.d === sel ? "selected" : ""}>${escapeHtml(prettyDate(p.d))}</option>`).join("");
+  const beforeD = chron[0].d, afterD = chron[chron.length - 1].d;
+  const findImg = (d) => { const p = photos.find((x) => x.d === d); return p ? p.img : ""; };
+  wrap.innerHTML = `
+    <h3 class="prog-title">Before / After</h3>
+    <div class="compare-grid">
+      <div class="compare-side">
+        <select class="prog-select" id="cmpBefore">${opts(beforeD)}</select>
+        <img id="cmpBeforeImg" src="${findImg(beforeD)}" alt="before" />
+      </div>
+      <div class="compare-side">
+        <select class="prog-select" id="cmpAfter">${opts(afterD)}</select>
+        <img id="cmpAfterImg" src="${findImg(afterD)}" alt="after" />
+      </div>
+    </div>`;
+  const bSel = document.getElementById("cmpBefore"), aSel = document.getElementById("cmpAfter");
+  if (bSel) bSel.addEventListener("change", () => { const el = document.getElementById("cmpBeforeImg"); if (el) el.src = findImg(bSel.value); });
+  if (aSel) aSel.addEventListener("change", () => { const el = document.getElementById("cmpAfterImg"); if (el) el.src = findImg(aSel.value); });
+}
+
+// wire the "add photo" file input once (guarded). Captures + downscales to a JPEG
+// data URL (same approach as calorie photos), stamps today's date, saves + re-renders.
+let photoWired = false;
+function wirePhotos() {
+  if (photoWired) return;
+  const btn = document.getElementById("photoAddBtn");
+  const input = document.getElementById("photoInput");
+  if (!btn || !input) return;
+  photoWired = true;
+  btn.addEventListener("click", () => input.click());
+  input.addEventListener("change", () => {
+    const f = input.files && input.files[0];
+    input.value = "";
+    if (!f) return;
+    const status = document.getElementById("photoStatus");
+    if (status) status.textContent = "Adding…";
+    downscalePhoto(f, 720, 0.7).then((url) => {
+      photos.push({ d: todayStr(), img: url });
+      savePhotos();
+      if (status) status.textContent = "";
+      try { if (soundOn) blip(); } catch (e) {}
+      renderPhotos();
+    }).catch(() => { if (status) status.textContent = "Photo failed — try again."; });
   });
 }
 
@@ -3823,7 +4553,7 @@ function playCelebrations(queue, after) {
 function renderHistory() {
   const streak = computeStreak();
   document.getElementById("historyStreak").innerHTML =
-    streak > 0 ? `🔥 ${streak}-day streak — keep feeding the beast.` : `No streak yet. Log a workout today to start one. 🦎`;
+    streak > 0 ? `${icon("flame")} ${streak}-day streak — keep feeding the beast.` : `No streak yet. Log a workout today to start one. 🦎`;
 
   // personal records
   const prBox = document.getElementById("prList");
@@ -4188,7 +4918,7 @@ function renderProgress() {
         <div class="lock-emoji">🔒</div>
         <div class="lock-title">Progress charts are an Apex feature</div>
         <p class="lock-sub">MMR over time, per-lift strength, bodyweight, volume &amp; your training heatmap.</p>
-        <button class="btn premium-sub" data-gopremium type="button">👑 Go Apex</button>`;
+        <button class="btn premium-sub" data-gopremium type="button">${icon("crown")} Go Apex</button>`;
       const after = panel.querySelector(".section-title");
       if (after && after.nextSibling) panel.insertBefore(lock, after.nextSibling);
       else panel.appendChild(lock);
@@ -4645,25 +5375,26 @@ function maybeShowOnboarding() {
 })();
 
 // ===== startup animation =====
-// Simple, robust, image-driven splash. Two real photos (intro-claws.png ->
-// intro-eye.png) crossfade, then the neon REPTILIFT title ignites over the eye. ALL
-// motion is CSS @keyframes keyed off `.intro.go` (see styles.css) — there is no JS
-// animation engine. introTimers() just adds `.go` to start it and schedules a guarded,
-// idempotent hand-off to the app (with a hard safety net); playIntro() (settings
+// A 7-beat cinematic drawn ENTIRELY with inline SVG + CSS @keyframes (index.html /
+// styles.css) — no video, no image assets, so it renders instantly and never depends
+// on autoplay or a download. Beats: claw slashes rip in → a slit eye ignites behind
+// the gashes → the eye opens wide → REPTILIFT fades in over it → title dominant →
+// lightning crackles beneath → lockup + lens-flare streak (~3s total). ALL motion
+// is CSS keyed off `.intro.go`; introTimers() just adds `.go` and schedules a guarded,
+// idempotent hand-off (tap/click skips; hard safety net); playIntro() (settings
 // "replay intro") clones #intro, strips the run classes, and restarts cleanly.
 const appEl = document.getElementById("app");
 
-// Drive the CSS splash: add `.go` to start the @keyframes, then run a guarded,
-// idempotent hand-off to the app at ~3200ms (reveal #app, fade the intro, then hide
-// it). A hard 7s safety net guarantees the app reveals even if anything goes wrong —
-// the user must NEVER be stranded on a black screen.
+// Drive the CSS splash: add `.go` to start the @keyframes in sync, then run a
+// guarded, idempotent hand-off to the app at ~3.4s (reveal #app, fade the intro, then
+// hide it). A tap/click anywhere skips straight to the app, and a hard 5s safety net
+// guarantees the app reveals — the user must NEVER be stranded on a black screen.
 const REDUCE_MOTION = !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
 
 function introTimers(introEl, firstLoad) {
   if (!introEl) { try { if (appEl) appEl.classList.add("ready"); } catch (e) {} return; }
 
-  // Idempotent + guarded hand-off: fade the intro out and reveal the app. A broken
-  // or autoplay-blocked video must NEVER strand the user on a black screen.
+  // Idempotent + guarded hand-off: fade the intro out and reveal the app.
   let handed = false;
   const handOff = () => {
     if (handed) return; handed = true;
@@ -4671,28 +5402,27 @@ function introTimers(introEl, firstLoad) {
     try { introEl.classList.add("hide"); } catch (e) {}
     window.setTimeout(() => {
       try { introEl.style.display = "none"; } catch (e) {}
-      try { const v = introEl.querySelector("video"); if (v) v.pause(); } catch (e) {}
       // first load only: offer the onboarding wizard to brand-new users (no-op otherwise).
       if (firstLoad) { try { maybeShowOnboarding(); } catch (e) {} }
     }, 650);
   };
 
-  const vid = introEl.querySelector("video");
+  // tap/click anywhere skips the cinematic
+  try { introEl.addEventListener("pointerdown", handOff, { once: true }); } catch (e) {}
+
   if (REDUCE_MOTION) {                       // skip the motion — hand off quickly
-    try { if (vid) vid.pause(); } catch (e) {}
     window.setTimeout(handOff, 600);
-  } else if (vid) {
-    try { vid.currentTime = 0; } catch (e) {}
-    try { vid.addEventListener("ended", handOff, { once: true }); } catch (e) {}
-    try {
-      const p = vid.play();
-      if (p && p.catch) p.catch(() => { window.setTimeout(handOff, 1200); });   // autoplay blocked → don't get stuck
-    } catch (e) { window.setTimeout(handOff, 1200); }
-    window.setTimeout(handOff, 6000);        // a beat past the ~5s clip, in case 'ended' never fires
   } else {
-    window.setTimeout(handOff, 3000);
+    // double-rAF so a fresh/cloned node paints its base (all-hidden, pure black)
+    // state first — then `.go` starts every keyframe on the same clock.
+    try {
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        try { introEl.classList.add("go"); } catch (e) {}
+      }));
+    } catch (e) { try { introEl.classList.add("go"); } catch (e2) {} }
+    window.setTimeout(handOff, 3350);        // ~3s sequence + a beat on the lockup
   }
-  window.setTimeout(handOff, 8000);          // hard safety net, regardless
+  window.setTimeout(handOff, 5000);          // hard safety net, regardless
 }
 
 (function () {
@@ -5800,7 +6530,7 @@ function openFriendModal(uid, p) {
         <div class="fp-stat"><b>${mmr.toLocaleString()}</b><span>Overall MMR</span></div>
         <div class="fp-stat"><b>${streak.toLocaleString()}</b><span>day streak</span></div>
       </div>
-      <button class="btn fp-challenge" id="fpChallenge" type="button">⚔️ Challenge</button>
+      <button class="btn fp-challenge" id="fpChallenge" type="button">${icon("swords")} Challenge</button>
       <button class="btn ghost fp-unfriend" id="fpUnfriend" type="button">Unfriend</button>`;
     const ch = document.getElementById("fpChallenge");
     if (ch) ch.addEventListener("click", () => {
@@ -5872,7 +6602,7 @@ let duelBusy = false;
 
 function duelLiftOptions() {
   // 'Overall MMR' first, then every exercise grouped subtly by name. Reuse EXERCISES().
-  let html = `<option value="overall">⭐ Overall MMR</option>`;
+  let html = `<option value="overall">Overall MMR</option>`;
   try {
     EXERCISES().forEach((e) => {
       html += `<option value="${escapeHtml(e.id)}">${escapeHtml(e.name)}</option>`;
@@ -5972,7 +6702,7 @@ async function submitDuel() {
     setErr("Couldn't send that challenge — try again.");
   } finally {
     duelBusy = false;
-    if (sendBtn) { sendBtn.disabled = false; sendBtn.textContent = "Send challenge ⚔️"; }
+    if (sendBtn) { sendBtn.disabled = false; sendBtn.textContent = "Send challenge"; }
   }
 }
 
@@ -6060,11 +6790,11 @@ async function loadDuels() {
 
   let html = "";
   if (incoming.length) {
-    html += `<h3 class="sub">⚔️ Incoming challenges</h3>` +
+    html += `<h3 class="sub">${icon("swords")} Incoming challenges</h3>` +
       incoming.map((d) => duelPendingCard(d, "incoming")).join("");
   }
   if (active.length) {
-    html += `<h3 class="sub">🔥 Active duels</h3>` + active.map(duelActiveCard).join("");
+    html += `<h3 class="sub">${icon("flame")} Active duels</h3>` + active.map(duelActiveCard).join("");
   }
   if (outgoing.length) {
     html += `<h3 class="sub">⏳ Waiting on them</h3>` +
@@ -6284,9 +7014,9 @@ function queueDuelWinToast(d) {
     document.body.appendChild(el);
   }
   el.innerHTML = `
-    <span class="at-ic">⚔️</span>
+    <span class="at-ic">${icon("swords")}</span>
     <span class="at-main">
-      <span class="at-tag">🏆 Duel won</span>
+      <span class="at-tag">${icon("trophy")} Duel won</span>
       <span class="at-name">${escapeHtml(d.exercise_name || "Overall MMR")} <small>vs ${escapeHtml(d.challenger_id === cloudUser.id ? d.opponent_name : d.challenger_name)}</small></span>
     </span>`;
   el.classList.remove("show");
